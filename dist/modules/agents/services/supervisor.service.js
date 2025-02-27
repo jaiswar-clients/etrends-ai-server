@@ -138,7 +138,7 @@ let SupervisorService = class SupervisorService {
                     const filename = `audit_summary_report_${timestamp}.pdf`;
                     const outputPath = path.join(this.pdfOutputPath, filename);
                     const html = marked_1.marked.parse(content);
-                    const browser = await puppeteer_1.default.launch({ headless: true });
+                    const browser = await puppeteer_1.default.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
                     const page = await browser.newPage();
                     await page.setContent(`
               <html>

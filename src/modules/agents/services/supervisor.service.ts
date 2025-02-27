@@ -196,7 +196,7 @@ export class SupervisorService implements OnModuleInit {
             const html = marked.parse(content);
 
             // Generate PDF using puppeteer
-            const browser = await puppeteer.launch({ headless: true });
+            const browser = await puppeteer.launch({ headless: true,args:['--no-sandbox','--disable-setuid-sandbox'] });
             const page = await browser.newPage();
 
             await page.setContent(`
