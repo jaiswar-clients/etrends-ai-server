@@ -5,43 +5,50 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@/common/config/services/config.service';
-import { ChatAnthropic } from '@langchain/anthropic';
+
+import * as path from 'path';
+import * as fs from 'fs/promises';
+import puppeteer from 'puppeteer';
+import { marked } from 'marked';
+
 import {
   END,
   Annotation,
   StateGraph,
+  AnnotationRoot,
+  BinaryOperatorAggregate,
   START,
-  MemorySaver,
+  CompiledGraph,
 } from '@langchain/langgraph';
-import {
-  BaseMessage,
-  HumanMessage,
-  SystemMessage,
-} from '@langchain/core/messages';
+import { BaseMessage } from '@langchain/core/messages';
+import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
+
+import { ChatAnthropic } from '@langchain/anthropic';
+import { DatabaseService } from '@/common/db/db.service';
+import { LoggerService } from '@/common/logger/services/logger.service';
+import { SystemMessage } from '@langchain/core/messages';
+import { supervisorSummaryAgentPrompt } from '@/prompts/index';
+import { MemorySaver } from '@langchain/langgraph';
 import {
   ChatPromptTemplate,
   MessagesPlaceholder,
 } from '@langchain/core/prompts';
-import { RunnableConfig } from '@langchain/core/runnables';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
-import * as path from 'path';
-import * as fs from 'fs/promises';
-import { DynamicStructuredTool } from '@langchain/core/tools';
-import { createCanvas } from 'canvas';
-import puppeteer from 'puppeteer';
-import { marked } from 'marked';
-import { DatabaseService } from '@/common/db/db.service';
-import { LoggerService } from '@/common/logger/services/logger.service';
 
 @Injectable()
 export class SupervisorService implements OnModuleInit {
   private llm: ChatAnthropic;
   private summarizeAgent: any;
-  private chartGenAgent: any;
-  private graph: any;
+  private supervisor: CompiledGraph<any, any, any, any, any, any>;
   private readonly pdfOutputPath: string;
   private readonly chartOutputPath: string;
+
+  private AgentState: AnnotationRoot<{
+    messages: BinaryOperatorAggregate<BaseMessage[], BaseMessage[]>;
+    next: BinaryOperatorAggregate<string, string>;
+  }>;
+  private members: string[] = ['summarizer'];
 
   constructor(
     private readonly configService: ConfigService,
@@ -50,6 +57,17 @@ export class SupervisorService implements OnModuleInit {
   ) {
     this.pdfOutputPath = path.join(process.cwd(), 'files');
     this.chartOutputPath = path.join(process.cwd(), 'files');
+    this.AgentState = Annotation.Root({
+      messages: Annotation<BaseMessage[]>({
+        reducer: (x, y) => x.concat(y),
+        default: () => [],
+      }),
+      // The agent node that last performed work
+      next: Annotation<string>({
+        reducer: (x, y) => y ?? x ?? END,
+        default: () => END,
+      }),
+    });
   }
 
   async onModuleInit() {
@@ -114,7 +132,7 @@ export class SupervisorService implements OnModuleInit {
       await this.createAgents();
 
       // Build the workflow graph
-      this.graph = await this.createGraph();
+      await this.createSupervisor();
 
       this.loggerService.log(
         JSON.stringify({
@@ -137,422 +155,16 @@ export class SupervisorService implements OnModuleInit {
     }
   }
 
-  private async createAgents() {
+  async createAgents() {
     try {
-      this.loggerService.log(
-        JSON.stringify({
-          message: 'Creating agents',
-          service: 'SupervisorService',
-          method: 'createAgents',
-        }),
-      );
-
-      // Chart tool implementation
-      const chartTool = new DynamicStructuredTool({
-        name: 'chart_generator',
-        description: 'Generates a bar chart from an array of data points.',
-        schema: z.object({
-          data: z.array(
-            z.object({
-              label: z.string(),
-              value: z.number(),
-            }),
-          ),
-          title: z.string().describe('The title of the chart'),
-        }),
-        func: async ({ data, title }) => {
-          try {
-            this.loggerService.log(
-              JSON.stringify({
-                message: 'Generating chart',
-                service: 'SupervisorService',
-                method: 'chartTool.func',
-                data: { title, dataPoints: data.length },
-              }),
-            );
-
-            const width = 500;
-            const height = 500;
-            const margin = { top: 20, right: 30, bottom: 30, left: 40 };
-
-            const canvas = createCanvas(width, height);
-            const ctx = canvas.getContext('2d');
-
-            // Calculate scales manually
-            const xLabels = data.map((d) => d.label);
-            const maxValue = Math.max(...data.map((d) => d.value));
-            const roundedMaxValue = Math.ceil(maxValue / 10) * 10; // Round up to nearest 10
-
-            const barWidth =
-              (width - margin.left - margin.right) / xLabels.length - 10;
-
-            const colorPalette = [
-              '#e6194B',
-              '#3cb44b',
-              '#ffe119',
-              '#4363d8',
-              '#f58231',
-              '#911eb4',
-              '#42d4f4',
-              '#f032e6',
-              '#bfef45',
-              '#fabebe',
-            ];
-
-            // Clear canvas
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, width, height);
-
-            // Draw title
-            ctx.fillStyle = 'black';
-            ctx.font = 'bold 16px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(title, width / 2, margin.top / 2);
-
-            // Draw bars
-            data.forEach((d, idx) => {
-              const xPos =
-                margin.left +
-                idx * ((width - margin.left - margin.right) / xLabels.length) +
-                5;
-              const barHeight =
-                ((height - margin.top - margin.bottom) * d.value) /
-                roundedMaxValue;
-              const yPos = height - margin.bottom - barHeight;
-
-              ctx.fillStyle = colorPalette[idx % colorPalette.length];
-              ctx.fillRect(xPos, yPos, barWidth, barHeight);
-
-              // Add value on top of bar
-              ctx.fillStyle = 'black';
-              ctx.font = '12px Arial';
-              ctx.textAlign = 'center';
-              ctx.fillText(d.value.toString(), xPos + barWidth / 2, yPos - 5);
-            });
-
-            // Draw x-axis
-            ctx.beginPath();
-            ctx.strokeStyle = 'black';
-            ctx.moveTo(margin.left, height - margin.bottom);
-            ctx.lineTo(width - margin.right, height - margin.bottom);
-            ctx.stroke();
-
-            // X-axis labels
-            ctx.fillStyle = 'black';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            xLabels.forEach((label, idx) => {
-              const xPos =
-                margin.left +
-                idx * ((width - margin.left - margin.right) / xLabels.length) +
-                barWidth / 2 +
-                5;
-              ctx.fillText(label, xPos, height - margin.bottom + 6);
-            });
-
-            // Draw y-axis
-            ctx.beginPath();
-            ctx.moveTo(margin.left, margin.top);
-            ctx.lineTo(margin.left, height - margin.bottom);
-            ctx.stroke();
-
-            // Y-axis labels
-            ctx.fillStyle = 'black';
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
-            const numTicks = 5;
-            for (let i = 0; i <= numTicks; i++) {
-              const value = (roundedMaxValue / numTicks) * i;
-              const yPos =
-                height -
-                margin.bottom -
-                ((height - margin.top - margin.bottom) * value) /
-                  roundedMaxValue;
-
-              ctx.beginPath();
-              ctx.moveTo(margin.left, yPos);
-              ctx.lineTo(margin.left - 6, yPos);
-              ctx.stroke();
-              ctx.fillText(value.toString(), margin.left - 8, yPos);
-            }
-
-            const filename = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.png`;
-            const filePath = path.join(this.chartOutputPath, filename);
-
-            // Save the chart as PNG
-            const buffer = canvas.toBuffer('image/png');
-            await fs.writeFile(filePath, buffer);
-
-            this.loggerService.log(
-              JSON.stringify({
-                message: 'Chart generated successfully',
-                service: 'SupervisorService',
-                method: 'chartTool.func',
-                data: { filename, filePath },
-              }),
-            );
-
-            return JSON.stringify({
-              message: `Chart generated successfully: ${filename}`,
-              url: `/files/${filename}`,
-              filePath: filePath,
-            });
-          } catch (error: unknown) {
-            this.loggerService.error(
-              JSON.stringify({
-                message: 'Error generating chart',
-                service: 'SupervisorService',
-                method: 'chartTool.func',
-                error: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined,
-                data: { title, dataPoints: data?.length },
-              }),
-            );
-            throw new Error(
-              `Failed to generate chart: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-        },
-      });
-
-      // PDF tool implementation
-      const pdfTool = new DynamicStructuredTool({
-        name: 'pdf_generator',
-        description: 'Generates a PDF containing summary and chart',
-        schema: z.object({
-          summary: z.string().describe('The content to include in the PDF'),
-          chartPath: z.string().optional().describe('Path to the chart image'),
-          title: z.string().describe('The title of the PDF'),
-        }),
-        func: async ({ summary, chartPath, title }) => {
-          try {
-            this.loggerService.log(
-              JSON.stringify({
-                message: 'Generating PDF',
-                service: 'SupervisorService',
-                method: 'pdfTool.func',
-                data: {
-                  title,
-                  summaryLength: summary.length,
-                  hasChart: !!chartPath,
-                  chartPath,
-                },
-              }),
-            );
-
-            const filename = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${Date.now()}.pdf`;
-            const outputPath = path.join(this.pdfOutputPath, filename);
-
-            // Convert Markdown to HTML
-            let htmlContent = `
-              <html>
-                <head>
-                  <style>
-                    body { 
-                      font-family: Arial, sans-serif; 
-                      padding: 20px;
-                      max-width: 800px;
-                      margin: 0 auto;
-                    }
-                    h1, h2, h3 { 
-                      color: #333;
-                      margin-top: 20px;
-                    }
-                    .summary {
-                      margin: 20px 0;
-                      line-height: 1.6;
-                    }
-                    .chart {
-                      margin: 20px 0;
-                      text-align: center;
-                    }
-                    .chart img {
-                      max-width: 100%;
-                      height: auto;
-                    }
-                  </style>
-                </head>
-                <body>
-                  <h1>${title}</h1>
-                  <div class="summary">
-                    ${marked(summary)}
-                  </div>`;
-
-            // Add chart if provided
-            if (chartPath) {
-              try {
-                // Read the image file as base64
-                const imageData = await fs.readFile(chartPath);
-                const base64Image = imageData.toString('base64');
-
-                htmlContent += `
-                  <div class="chart">
-                    <h2>Data Visualization</h2>
-                    <img src="data:image/png;base64,${base64Image}" alt="Data Chart">
-                  </div>`;
-
-                this.loggerService.log(
-                  JSON.stringify({
-                    message: 'Chart embedded in PDF',
-                    service: 'SupervisorService',
-                    method: 'pdfTool.func',
-                    data: { chartPath },
-                  }),
-                );
-              } catch (chartError: unknown) {
-                this.loggerService.error(
-                  JSON.stringify({
-                    message: 'Error embedding chart in PDF',
-                    service: 'SupervisorService',
-                    method: 'pdfTool.func',
-                    error:
-                      chartError instanceof Error
-                        ? chartError.message
-                        : String(chartError),
-                    data: { chartPath },
-                  }),
-                );
-              }
-            }
-
-            htmlContent += `
-                </body>
-              </html>`;
-
-            this.loggerService.log(
-              JSON.stringify({
-                message: 'Launching puppeteer',
-                service: 'SupervisorService',
-                method: 'pdfTool.func',
-              }),
-            );
-
-            // Launch Puppeteer with stable configuration
-            const browser = await puppeteer.launch({
-              headless: true,
-              args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            });
-            const page = await browser.newPage();
-
-            // Set content with longer timeout and wait for network idle
-            await page.setContent(htmlContent, {
-              waitUntil: ['load', 'networkidle0'],
-              timeout: 30000,
-            });
-
-            // Generate PDF
-            await page.pdf({
-              path: outputPath,
-              format: 'A4',
-              margin: {
-                top: '50px',
-                right: '50px',
-                bottom: '50px',
-                left: '50px',
-              },
-              printBackground: true,
-            });
-
-            await browser.close();
-
-            this.loggerService.log(
-              JSON.stringify({
-                message: 'PDF generated successfully',
-                service: 'SupervisorService',
-                method: 'pdfTool.func',
-                data: { filename, outputPath },
-              }),
-            );
-
-            return JSON.stringify({
-              message: `PDF generated successfully: ${filename}`,
-              url: `/files/${filename}`,
-            });
-          } catch (error: unknown) {
-            this.loggerService.error(
-              JSON.stringify({
-                message: 'Error generating PDF',
-                service: 'SupervisorService',
-                method: 'pdfTool.func',
-                error: error instanceof Error ? error.message : String(error),
-                stack: error instanceof Error ? error.stack : undefined,
-                data: { title, hasChart: !!chartPath },
-              }),
-            );
-            throw new Error(
-              `Failed to generate PDF: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-        },
-      });
-
-      // Create summarize agent
-      this.summarizeAgent = createReactAgent({
-        llm: this.llm,
-        tools: [pdfTool],
-        prompt: new SystemMessage(
-          `
-I want you to act as a professional report summarizer with expertise in AUDIT PROGRESS REPORT. I will provide you with a detailed report, and your task is to generate a concise and informative summary that captures the essential findings, conclusions, and recommendations.
-
-**Instructions:**
-
-1. **Content Focus:**
-   - **Key Findings:** Highlight the most critical insights and data points presented in the report.
-   - **Conclusions:** Summarize the main conclusions drawn from the analysis or discussion.
-   - **Recommendations:** Outline any proposed actions, strategies, or next steps suggested by the report.
-
-2. **Structure & Format:**
-   - **Introduction:** Provide a brief overview of the report's purpose and scope.
-   - **Main Body:** Present the key findings, conclusions, and recommendations in a clear and organized manner.
-   - **Conclusion:** Offer a succinct summary that encapsulates the overall insights and suggested actions.
-
-3. **Style & Tone:**
-   - **Professional and Objective:** Maintain a formal tone, using precise language and avoiding personal bias.
-   - **Clarity and Conciseness:** Ensure the summary is easy to understand, avoiding unnecessary jargon and focusing on essential information.
-
-4. **Additional Elements (if applicable):**
-   - **Visual Aids:** Suggest any tables, charts, or figures that could enhance the comprehension of the summarized content.
-   - **Important Statistics:** Emphasize significant data points or metrics that are pivotal to the report's insights.
-
-NOTE: You MUST use the pdf_generator tool to create a well-formatted PDF with your summary. The PDF should have a clear title and professional formatting.
-          `,
-        ),
-      });
-
-      // Create chart generation agent
-      this.chartGenAgent = createReactAgent({
-        llm: this.llm,
-        tools: [chartTool, pdfTool],
-        prompt: new SystemMessage(
-          `You excel at generating bar charts and creating comprehensive reports based on audit data.
-
-Your tasks:
-1. Analyze the provided audit data to identify key metrics that would benefit from visualization
-2. Extract numerical data and create appropriate labels for a bar chart
-3. Use the chart_generator tool to create a visual representation of the data
-4. After generating a chart, use the pdf_generator tool to create a PDF that combines the summary and chart
-
-When creating charts:
-- Choose the most relevant metrics from the audit data
-- Format the data as an array of objects with "label" and "value" properties
-- Provide a clear, descriptive title for the chart
-
-When creating the final PDF:
-- Include a comprehensive summary of the audit findings
-- Reference the chart you created and explain its significance
-- Provide actionable insights based on the data visualization
-
-Always use both tools in sequence - first chart_generator, then pdf_generator - to create a complete report.`,
-        ),
-      });
+      // Create the summarize agent
+      await this.createSummarizeAgent();
 
       this.loggerService.log(
         JSON.stringify({
           message: 'Agents created successfully',
           service: 'SupervisorService',
           method: 'createAgents',
-          agents: ['summarizeAgent', 'chartGenAgent'],
         }),
       );
     } catch (error: unknown) {
@@ -569,133 +181,165 @@ Always use both tools in sequence - first chart_generator, then pdf_generator - 
     }
   }
 
-  // Define the state that is passed between nodes
-  private AgentState = Annotation.Root({
-    messages: Annotation<BaseMessage[]>({
-      reducer: (x, y) => x.concat(y),
-      default: () => [],
-    }),
-    next: Annotation<string>({
-      reducer: (x, y) => y ?? x ?? END,
-      default: () => END,
-    }),
-  });
-
-  private members = ['chart_generator', 'summarizer'] as const;
-  private options = [END, ...this.members];
-
-  private summarizeNode = async (state: any, config?: RunnableConfig) => {
-    this.loggerService.log(
-      JSON.stringify({
-        message: 'Summarize node activated',
-        service: 'SupervisorService',
-        method: 'summarizeNode',
-        data: { messagesCount: state.messages.length },
-      }),
-    );
-
+  async createSummarizeAgent() {
     try {
-      const result = await this.summarizeAgent.invoke(state, config);
-      const lastMessage = result.messages[result.messages.length - 1];
+      // Create PDF generator tool
+      const pdfGeneratorTool = tool(
+        async (input) => {
+          try {
+            const { content } = input;
+            const timestamp = new Date().getTime();
+            const filename = `audit_summary_report_${timestamp}.pdf`;
+            const outputPath = path.join(this.pdfOutputPath, filename);
+
+            // Convert markdown to HTML
+            const html = marked.parse(content);
+
+            // Generate PDF using puppeteer
+            const browser = await puppeteer.launch({ headless: true });
+            const page = await browser.newPage();
+
+            await page.setContent(`
+              <html>
+                <title>Audit Report(${new Date().toISOString().split('T')[0]})</title>
+                <head>
+                  <style>
+                    body {
+                      font-family: Arial, sans-serif;
+                      margin: 40px;
+                      line-height: 1.6;
+                    }
+                    h1 {
+                      color: #333;
+                      border-bottom: 1px solid #ddd;
+                      padding-bottom: 10px;
+                    }
+                    h2 {
+                      color: #444;
+                      margin-top: 20px;
+                    }
+                    p {
+                      margin-bottom: 16px;
+                    }
+                    ul, ol {
+                      margin-bottom: 16px;
+                    }
+                  </style>
+                </head>
+                <body>
+                  ${html}
+                </body>
+              </html>
+            `);
+
+            await page.pdf({
+              path: outputPath,
+              format: 'A4',
+              margin: {
+                top: '10px',
+                right: '20px',
+                bottom: '10px',
+                left: '10px',
+              },
+            });
+            await browser.close();
+
+            this.loggerService.log(
+              JSON.stringify({
+                message: 'PDF generated successfully',
+                service: 'SupervisorService',
+                method: 'pdfGeneratorTool',
+                filename,
+                outputPath,
+              }),
+            );
+
+            const fileUrl = await this.getFileUrl(filename);
+            return `PDF generated successfully, file URL: ${fileUrl}`;
+          } catch (error) {
+            this.loggerService.error(
+              JSON.stringify({
+                message: 'Error generating PDF',
+                service: 'SupervisorService',
+                method: 'pdfGeneratorTool',
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+              }),
+            );
+            throw new Error(
+              `Failed to generate PDF: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        },
+        {
+          name: 'pdf_generator',
+          description: 'Generate a PDF document from markdown content',
+          schema: z.object({
+            content: z
+              .string()
+              .describe('The markdown content to convert to PDF'),
+            title: z.string().describe('The title of the PDF document'),
+          }),
+        },
+      );
+
+      // Use the prompt from the imported file
+      const promptMessage = new SystemMessage(supervisorSummaryAgentPrompt);
+
+      this.summarizeAgent = createReactAgent({
+        llm: this.llm,
+        tools: [pdfGeneratorTool],
+        prompt: promptMessage,
+      });
+      this.members = ['summarizer'];
 
       this.loggerService.log(
         JSON.stringify({
-          message: 'Summarize completed task',
+          message: 'Summarize agent created successfully',
           service: 'SupervisorService',
-          method: 'summarizeNode',
-          data: {
-            responseLength: lastMessage.content.length,
-            responsePreview: lastMessage.content.substring(0, 100) + '...',
-          },
+          method: 'createSummarizeAgent',
         }),
       );
 
-      return {
-        messages: [
-          new HumanMessage({
-            content: lastMessage.content,
-            name: 'Summarizer',
-          }),
-        ],
-      };
+      return this.summarizeAgent;
     } catch (error: unknown) {
       this.loggerService.error(
         JSON.stringify({
-          message: 'Error in summarize node',
+          message: 'Error creating summarize agent',
           service: 'SupervisorService',
-          method: 'summarizeNode',
+          method: 'createSummarizeAgent',
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
         }),
       );
       throw error;
     }
-  };
+  }
 
-  private chartGenNode = async (state: any, config?: RunnableConfig) => {
-    this.loggerService.log(
-      JSON.stringify({
-        message: 'Chart generator node activated',
-        service: 'SupervisorService',
-        method: 'chartGenNode',
-        data: { messagesCount: state.messages.length },
-      }),
-    );
-
+  async createSupervisor() {
     try {
-      const result = await this.chartGenAgent.invoke(state, config);
-      const lastMessage = result.messages[result.messages.length - 1];
+      if (!this.summarizeAgent) {
+        throw new Error('Summarize agent not initialized');
+      }
 
       this.loggerService.log(
         JSON.stringify({
-          message: 'Chart generation completed',
+          message: 'Starting supervisor creation',
           service: 'SupervisorService',
-          method: 'chartGenNode',
-          data: {
-            responseLength: lastMessage.content.length,
-            responsePreview: lastMessage.content.substring(0, 100) + '...',
-          },
+          method: 'createSupervisor',
         }),
       );
 
-      return {
-        messages: [
-          new HumanMessage({
-            content: lastMessage.content,
-            name: 'Chart Generator',
-          }),
-        ],
-      };
-    } catch (error: unknown) {
-      this.loggerService.error(
-        JSON.stringify({
-          message: 'Error in chart generator node',
-          service: 'SupervisorService',
-          method: 'chartGenNode',
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-        }),
-      );
-      throw error;
-    }
-  };
-
-  private async createSupervisorChain() {
-    this.loggerService.log(
-      JSON.stringify({
-        message: 'Creating supervisor chain',
-        service: 'SupervisorService',
-        method: 'createSupervisorChain',
-      }),
-    );
-
-    try {
       const systemPrompt =
         'You are a supervisor tasked with managing a conversation between the' +
         ' following workers: {members}. Given the following user request,' +
         ' respond with the worker to act next. Each worker will perform a' +
         ' task and respond with their results and status. When finished,' +
         ' respond with FINISH.';
+
+      const options = [END, ...this.members];
+
+      const checkpointer = new MemorySaver();
 
       const routingTool = {
         name: 'route',
@@ -716,81 +360,77 @@ Always use both tools in sequence - first chart_generator, then pdf_generator - 
       ]);
 
       const formattedPrompt = await prompt.partial({
-        options: this.options.join(', '),
+        options: options.join(', '),
         members: this.members.join(', '),
       });
 
-      const chain = formattedPrompt
+      const supervisorChain = formattedPrompt
         .pipe(
           this.llm.bindTools([routingTool], {
             tool_choice: 'route',
           }),
         )
-        .pipe((x: { tool_calls?: { args: any }[] }) => x.tool_calls?.[0]?.args);
+        // select the first one
+        .pipe((x) => x.tool_calls[0].args);
+
+      if (!this.AgentState) {
+        throw new Error('AgentState not initialized');
+      }
 
       this.loggerService.log(
         JSON.stringify({
-          message: 'Supervisor chain created successfully',
+          message: 'Creating workflow graph',
           service: 'SupervisorService',
-          method: 'createSupervisorChain',
+          method: 'createSupervisor',
+          members: this.members,
         }),
       );
 
-      return chain;
-    } catch (error: unknown) {
-      this.loggerService.error(
-        JSON.stringify({
-          message: 'Error creating supervisor chain',
-          service: 'SupervisorService',
-          method: 'createSupervisorChain',
-          error: error instanceof Error ? error.message : String(error),
-          stack: error instanceof Error ? error.stack : undefined,
-        }),
-      );
-      throw error;
-    }
-  }
-
-  private async createGraph() {
-    this.loggerService.log(
-      JSON.stringify({
-        message: 'Building workflow graph',
-        service: 'SupervisorService',
-        method: 'createGraph',
-      }),
-    );
-
-    try {
       const workflow = new StateGraph(this.AgentState)
-        .addNode('chart_generator', this.chartGenNode.bind(this))
-        .addNode('summarizer', this.summarizeNode.bind(this))
-        .addNode('supervisor', await this.createSupervisorChain());
-
+        // 2. Add the nodes; these will do the work
+        .addNode('summarizer', this.summarizeAgent)
+        .addNode('supervisor', supervisorChain);
+      // 3. Define the edges. We will define both regular and conditional ones
+      // After a worker completes, report to supervisor
       this.members.forEach((member) => {
-        workflow.addEdge(member, 'supervisor');
+        workflow.addEdge(member as any, 'supervisor');
       });
 
-      workflow.addConditionalEdges('supervisor', (x: any) => x.next);
+      workflow.addConditionalEdges(
+        'supervisor',
+        (x: typeof this.AgentState.State) => x.next,
+      );
 
       workflow.addEdge(START, 'supervisor');
 
-      const memorySaver = new MemorySaver();
-
       this.loggerService.log(
         JSON.stringify({
-          message: 'Workflow graph built successfully',
+          message: 'Compiling workflow graph',
           service: 'SupervisorService',
-          method: 'createGraph',
+          method: 'createSupervisor',
         }),
       );
 
-      return workflow.compile({ checkpointer: memorySaver });
-    } catch (error: unknown) {
+      const graph = workflow.compile({
+        checkpointer,
+      });
+      this.supervisor = graph;
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Supervisor created successfully',
+          service: 'SupervisorService',
+          method: 'createSupervisor',
+        }),
+      );
+
+      return 'Compiled supervisor';
+    } catch (error) {
       this.loggerService.error(
         JSON.stringify({
-          message: 'Error building workflow graph',
+          message: 'Error creating supervisor',
           service: 'SupervisorService',
-          method: 'createGraph',
+          method: 'createSupervisor',
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
         }),
@@ -799,139 +439,244 @@ Always use both tools in sequence - first chart_generator, then pdf_generator - 
     }
   }
 
-  async run(message: string, threadId: string = 'default') {
-    this.loggerService.log(
-      JSON.stringify({
-        message: 'Starting supervisor run',
-        service: 'SupervisorService',
-        method: 'run',
-        data: {
-          messageLength: message.length,
-          messagePreview: message.substring(0, 100) + '...',
-          threadId,
-        },
-      }),
-    );
-
-    if (!message) {
-      const error = new Error('Message is required');
-      this.loggerService.error(
-        JSON.stringify({
-          message: 'Error: Empty message',
-          service: 'SupervisorService',
-          method: 'run',
-          error: error.message,
-        }),
-      );
-      throw error;
-    }
-
+  async generateSummaryReport(content: string, threadId: string = 'default') {
     try {
+      if (!this.summarizeAgent) {
+        throw new Error('Summarize agent not initialized');
+      }
+
       this.loggerService.log(
         JSON.stringify({
-          message: 'Invoking graph with message',
+          message: 'Starting summary report generation',
           service: 'SupervisorService',
-          method: 'run',
-          data: { threadId },
+          method: 'generateSummaryReport',
+          contentLength: content.length,
+          threadId,
         }),
       );
 
-      const result = await this.graph.invoke(
+      const result = await this.supervisor.invoke(
         {
-          messages: [new HumanMessage({ content: message })],
+          messages: [
+            {
+              role: 'user',
+              content: content,
+            },
+          ],
         },
         {
           configurable: {
             thread_id: threadId,
           },
+          recursionLimit: 30,
         },
       );
 
-      const response = result.messages[result.messages.length - 1].content;
-
       this.loggerService.log(
         JSON.stringify({
-          message: 'Supervisor run completed successfully',
+          message: 'Summary report generated successfully',
           service: 'SupervisorService',
-          method: 'run',
-          data: {
-            responseLength: response.length,
-            responsePreview: response.substring(0, 100) + '...',
-            threadId,
-          },
+          method: 'generateSummaryReport',
+          messageCount: result.messages.length,
+          resultLength:
+            result.messages[result.messages.length - 1].content.length,
         }),
       );
 
-      return response;
+      return result.messages[result.messages.length - 1].content;
     } catch (error: unknown) {
       this.loggerService.error(
         JSON.stringify({
-          message: 'Error in supervisor run',
+          message: 'Error generating summary report',
           service: 'SupervisorService',
-          method: 'run',
+          method: 'generateSummaryReport',
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
-          data: { threadId },
+          threadId,
         }),
       );
-      throw error;
+      throw new HttpException(
+        `Failed to generate summary report: ${error instanceof Error ? error.message : String(error)}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
-  async getAuditReport(query: string, threadId: string = 'default') {
+  async run(task: string, threadId: string = 'default') {
     try {
       this.loggerService.log(
         JSON.stringify({
-          message: 'Getting audit report',
+          message: 'Starting report generation',
           service: 'SupervisorService',
-          method: 'getAuditReport',
-          data: {
-            queryLength: query.length,
-            queryPreview: query.substring(0, 100) + '...',
-            threadId,
-          },
+          method: 'run',
+          task,
+          threadId,
         }),
       );
 
-      const data = await this.databaseService.getAIAuditProgressData();
+      const auditData = await this.databaseService.getAIAuditProgressData();
 
       this.loggerService.log(
         JSON.stringify({
           message: 'Retrieved audit data',
           service: 'SupervisorService',
-          method: 'getAuditReport',
-          data: {
-            dataSize: JSON.stringify(data.data.slice(0, 50)).length,
-            recordCount: data?.data?.length || 0,
-          },
+          method: 'run',
+          dataCount: auditData.data.length,
+          sampleCount: Math.min(20, auditData.data.length),
         }),
       );
 
-      // Then use the supervisor to generate a report with charts
-      const supervisorPrompt = `
-    ${JSON.stringify(data.data.slice(0, 50))}
-    
-    Based on this data, generate a comprehensive audit progress report without charts: ${query}
-        `;
-        
+      const content = `
+AUDIT DATA:
+${JSON.stringify(auditData.data.slice(0, 20))}
 
-      return await this.run(supervisorPrompt, threadId);
-      //   return data;
-    } catch (error: unknown) {
+TASK: 
+${task || 'Create a detailed summary report of the audit data'}
+
+DATE: ${new Date().toISOString()}
+      `;
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Prepared content for summary generation',
+          service: 'SupervisorService',
+          method: 'run',
+          contentLength: content.length,
+          task: task || 'Create a detailed summary report of the audit data',
+        }),
+      );
+
+      const result = await this.generateSummaryReport(content, threadId);
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Summary report generated successfully',
+          service: 'SupervisorService',
+          method: 'run',
+          resultLength: result.length,
+        }),
+      );
+
+      return result;
+    } catch (error) {
       this.loggerService.error(
         JSON.stringify({
-          message: 'Error in getAuditReport',
+          message: 'Failed to generate summary report',
           service: 'SupervisorService',
-          method: 'getAuditReport',
+          method: 'run',
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
-          data: { threadId },
+          task,
+          threadId,
+        }),
+      );
+
+      throw new HttpException(
+        `Failed to generate summary report: ${error instanceof Error ? error.message : String(error)}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async getFileUrl(filename: string): Promise<string> {
+    try {
+      // Check if file exists
+      const filePath = path.join(this.pdfOutputPath, filename);
+      await fs.access(filePath);
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'File found',
+          service: 'SupervisorService',
+          method: 'getFileUrl',
+          filename,
+          path: filePath,
+        }),
+      );
+
+      return `${this.configService.get('APP_URL')}/files/${filename}`;
+    } catch (error) {
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'File not found',
+          service: 'SupervisorService',
+          method: 'getFileUrl',
+          filename,
+          error: error instanceof Error ? error.message : String(error),
         }),
       );
       throw new HttpException(
-        'Error in getAuditReport',
-        HttpStatus.INTERNAL_SERVER_ERROR,
+        `File not found: ${filename}`,
+        HttpStatus.NOT_FOUND,
       );
+    }
+  }
+
+  async getAllReports() {
+    try {
+      const files = await fs.readdir(this.pdfOutputPath);
+      
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Retrieved all report files',
+          service: 'SupervisorService',
+          method: 'getAllReports',
+          fileCount: files.length,
+          files,
+        }),
+      );
+      
+      // Process files and get URLs
+      const filePromises = files.map(async (file) => {
+        try {
+          const url = await this.getFileUrl(file);
+          // Extract timestamp from filename and convert to number
+          const timestampMatch = file.match(/\d+/);
+          const timestamp = timestampMatch ? parseInt(timestampMatch[0], 10) : 0;
+          
+          return {
+            filename: file,
+            url,
+            createdAt: new Date(timestamp).toISOString(),
+          };
+        } catch (error) {
+          this.loggerService.error(
+            JSON.stringify({
+              message: 'Error getting URL for file',
+              service: 'SupervisorService',
+              method: 'getAllReports',
+              filename: file,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+          );
+          return null;
+        }
+      });
+      
+      const results = await Promise.all(filePromises);
+      const validResults = results.filter(Boolean);
+      
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Processed all report files',
+          service: 'SupervisorService',
+          method: 'getAllReports',
+          totalFiles: files.length,
+          validFiles: validResults.length,
+        }),
+      );
+      
+      return validResults;
+    } catch (error) {
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error reading reports directory',
+          service: 'SupervisorService',
+          method: 'getAllReports',
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      throw error;
     }
   }
 }

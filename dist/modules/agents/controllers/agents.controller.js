@@ -21,20 +21,23 @@ let AgentsController = class AgentsController {
         this.ragService = ragService;
         this.supervisorService = supervisorService;
     }
+    async getAllReports() {
+        return this.supervisorService.getAllReports();
+    }
     async askAgent(body) {
         return this.ragService.askAgent(body.question, body.threadId || 'default');
     }
     async runSupervisor(body) {
-        return this.supervisorService.run(body.message, body.threadId || 'default');
-    }
-    async getAuditReport(body) {
-        return this.supervisorService.getAuditReport(body.query, body.threadId || 'default');
-    }
-    getFile(filename) {
-        return { url: `/files/${filename}` };
+        return this.supervisorService.run(body.message);
     }
 };
 exports.AgentsController = AgentsController;
+__decorate([
+    (0, common_1.Get)('reports'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AgentsController.prototype, "getAllReports", null);
 __decorate([
     (0, common_1.Post)('chat'),
     __param(0, (0, common_1.Body)()),
@@ -43,26 +46,12 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AgentsController.prototype, "askAgent", null);
 __decorate([
-    (0, common_1.Post)('supervisor'),
+    (0, common_1.Post)('report'),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AgentsController.prototype, "runSupervisor", null);
-__decorate([
-    (0, common_1.Post)('audit-report'),
-    __param(0, (0, common_1.Body)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], AgentsController.prototype, "getAuditReport", null);
-__decorate([
-    (0, common_1.Get)('files/:filename'),
-    __param(0, (0, common_1.Param)('filename')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
-    __metadata("design:returntype", void 0)
-], AgentsController.prototype, "getFile", null);
 exports.AgentsController = AgentsController = __decorate([
     (0, common_1.Controller)('agents'),
     __metadata("design:paramtypes", [rag_service_1.RagService,

@@ -4,6 +4,11 @@ export declare class AgentsController {
     private readonly ragService;
     private readonly supervisorService;
     constructor(ragService: RagService, supervisorService: SupervisorService);
+    getAllReports(): Promise<{
+        filename: string;
+        url: string;
+        createdAt: string;
+    }[]>;
     askAgent(body: {
         question: string;
         threadId?: string;
@@ -12,11 +17,4 @@ export declare class AgentsController {
         message: string;
         threadId?: string;
     }): Promise<any>;
-    getAuditReport(body: {
-        query: string;
-        threadId?: string;
-    }): Promise<any>;
-    getFile(filename: string): {
-        url: string;
-    };
 }

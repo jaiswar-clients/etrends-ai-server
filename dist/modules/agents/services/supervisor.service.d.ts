@@ -8,21 +8,23 @@ export declare class SupervisorService implements OnModuleInit {
     private readonly loggerService;
     private llm;
     private summarizeAgent;
-    private chartGenAgent;
-    private graph;
+    private supervisor;
     private readonly pdfOutputPath;
     private readonly chartOutputPath;
+    private AgentState;
+    private members;
     constructor(configService: ConfigService, databaseService: DatabaseService, loggerService: LoggerService);
     onModuleInit(): Promise<void>;
     initialize(): Promise<void>;
-    private createAgents;
-    private AgentState;
-    private members;
-    private options;
-    private summarizeNode;
-    private chartGenNode;
-    private createSupervisorChain;
-    private createGraph;
-    run(message: string, threadId?: string): Promise<any>;
-    getAuditReport(query: string, threadId?: string): Promise<any>;
+    createAgents(): Promise<void>;
+    createSummarizeAgent(): Promise<any>;
+    createSupervisor(): Promise<string>;
+    generateSummaryReport(content: string, threadId?: string): Promise<any>;
+    run(task: string, threadId?: string): Promise<any>;
+    getFileUrl(filename: string): Promise<string>;
+    getAllReports(): Promise<{
+        filename: string;
+        url: string;
+        createdAt: string;
+    }[]>;
 }

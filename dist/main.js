@@ -8,6 +8,7 @@ const nestjs_pino_1 = require("nestjs-pino");
 const helmet_1 = require("helmet");
 const response_interceptor_1 = require("./interceptors/response.interceptor");
 const http_exception_filter_1 = require("./common/filters/http-exception.filter");
+const path = require("path");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule, {
         bufferLogs: true,
@@ -32,6 +33,9 @@ async function bootstrap() {
         forbidNonWhitelisted: true,
         forbidUnknownValues: true,
     }));
+    app.useStaticAssets(path.join(process.cwd(), 'files'), {
+        prefix: '/files/',
+    });
     await app.listen(port);
 }
 bootstrap();

@@ -9,23 +9,20 @@ export class AgentsController {
     private readonly supervisorService: SupervisorService,
   ) {}
 
+  @Get('reports')
+  async getAllReports() {
+    return this.supervisorService.getAllReports();
+  }
+
   @Post('chat')
   async askAgent(@Body() body: { question: string; threadId?: string }) {
     return this.ragService.askAgent(body.question, body.threadId || 'default');
   }
 
-  @Post('supervisor')
+  @Post('report')
   async runSupervisor(@Body() body: { message: string; threadId?: string }) {
-    return this.supervisorService.run(body.message, body.threadId || 'default');
+    return this.supervisorService.run(body.message);
   }
 
-  @Post('audit-report')
-  async getAuditReport(@Body() body: { query: string; threadId?: string }) {
-    return this.supervisorService.getAuditReport(body.query, body.threadId || 'default');
-  }
 
-  @Get('files/:filename')
-  getFile(@Param('filename') filename: string) {
-    return { url: `/files/${filename}` };
-  }
 }

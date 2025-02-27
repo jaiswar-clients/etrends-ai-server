@@ -7,6 +7,7 @@ import { Logger } from 'nestjs-pino';
 import helmet from 'helmet';
 import { ResponseInterceptor } from 'interceptors/response.interceptor';
 import { HttpExceptionInterceptor as HttpExceptionFilter } from '@/common/filters/http-exception.filter';
+import * as path from 'path';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule,{
@@ -40,8 +41,11 @@ async function bootstrap() {
     }),
   );
 
+  // Serve static files from the 'files' directory
+  app.useStaticAssets(path.join(process.cwd(), 'files'), {
+    prefix: '/files/',
+  });
 
-  
   await app.listen(port);
 }
 
