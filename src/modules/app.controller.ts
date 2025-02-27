@@ -1,12 +1,16 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
+import { DatabaseService } from '@/common/db/db.service';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(
+    private readonly appService: AppService,
+    private databaseService: DatabaseService,
+  ) {}
 
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  @Get('ai-audit-progress')
+  async getAIAuditProgressData() {
+    return await this.databaseService.getAIAuditProgressData();
   }
 }

@@ -1,0 +1,71 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AgentsController = void 0;
+const common_1 = require("@nestjs/common");
+const rag_service_1 = require("../services/rag.service");
+const supervisor_service_1 = require("../services/supervisor.service");
+let AgentsController = class AgentsController {
+    constructor(ragService, supervisorService) {
+        this.ragService = ragService;
+        this.supervisorService = supervisorService;
+    }
+    async askAgent(body) {
+        return this.ragService.askAgent(body.question, body.threadId || 'default');
+    }
+    async runSupervisor(body) {
+        return this.supervisorService.run(body.message, body.threadId || 'default');
+    }
+    async getAuditReport(body) {
+        return this.supervisorService.getAuditReport(body.query, body.threadId || 'default');
+    }
+    getFile(filename) {
+        return { url: `/files/${filename}` };
+    }
+};
+exports.AgentsController = AgentsController;
+__decorate([
+    (0, common_1.Post)('chat'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AgentsController.prototype, "askAgent", null);
+__decorate([
+    (0, common_1.Post)('supervisor'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AgentsController.prototype, "runSupervisor", null);
+__decorate([
+    (0, common_1.Post)('audit-report'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AgentsController.prototype, "getAuditReport", null);
+__decorate([
+    (0, common_1.Get)('files/:filename'),
+    __param(0, (0, common_1.Param)('filename')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", void 0)
+], AgentsController.prototype, "getFile", null);
+exports.AgentsController = AgentsController = __decorate([
+    (0, common_1.Controller)('agents'),
+    __metadata("design:paramtypes", [rag_service_1.RagService,
+        supervisor_service_1.SupervisorService])
+], AgentsController);
+//# sourceMappingURL=agents.controller.js.map

@@ -26,6 +26,9 @@
     },
     "strict": true
   },
+  "watchOptions": {
+    "watchFile": "fixedPollingInterval"
+  },
   "include": ["src/**/*.ts", "types/express.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

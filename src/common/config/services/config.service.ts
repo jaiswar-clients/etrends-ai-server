@@ -5,7 +5,11 @@ import ConfigDTO from '../dto';
 @Injectable()
 export class ConfigService extends NestJsConfigService<ConfigDTO> {
   constructor() {
-    super();
+    super({
+      // Pass an empty object as the process.env default
+      // NestJS ConfigModule will handle the actual environment variables
+      cache: true,
+    });
   }
 
   get IS_PRODUCTION(): boolean {

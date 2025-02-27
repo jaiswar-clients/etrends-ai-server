@@ -4,8 +4,8 @@ import { AppService } from './app.service';
 import { LoggerModule } from '@/common/logger/logger.module';
 import { HttpModule } from '@/common/http/http.module';
 import { ConfigModule } from '@/common/config/config.module';
-import { MongooseModule } from '@nestjs/mongoose';
-import { ConfigService } from '@/common/config/services/config.service';
+import { DatabaseModule } from '@/common/db/db.module';
+import { AgentsModule } from './agents/agents.module';
 
 type NestModuleImport =
   | Type<any>
@@ -13,18 +13,15 @@ type NestModuleImport =
   | Promise<DynamicModule>
   | ForwardReference<any>;
 
-const appModules: NestModuleImport[] = [LoggerModule, HttpModule, ConfigModule];
+const appModules: NestModuleImport[] = [
+  LoggerModule, 
+  HttpModule, 
+  ConfigModule,
+  DatabaseModule
+];
 
 @Module({
-  imports: [
-    ...appModules,
-    MongooseModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        uri: config.get<string>('DATABASE_URL'),
-      }),
-    }),
-  ],
+  imports: [...appModules, AgentsModule],
   controllers: [AppController],
   providers: [AppService],
 })
