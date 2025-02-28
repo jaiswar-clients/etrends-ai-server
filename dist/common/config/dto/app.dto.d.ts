@@ -10,5 +10,6 @@ export declare class AppConfigDTO {
     CLIENT_URL: string;
     APP_URL: string;
     ANTHROPIC_API_KEY: string;
+    AI_MODEL: string;
     OPENAI_API_KEY: string;
 }

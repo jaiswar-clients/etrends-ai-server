@@ -23,7 +23,6 @@ const zod_1 = require("zod");
 const anthropic_1 = require("@langchain/anthropic");
 const db_service_1 = require("../../../common/db/db.service");
 const logger_service_1 = require("../../../common/logger/services/logger.service");
-const messages_1 = require("@langchain/core/messages");
 const index_1 = require("../../../prompts/index");
 const langgraph_2 = require("@langchain/langgraph");
 const prompts_1 = require("@langchain/core/prompts");
@@ -81,14 +80,14 @@ let SupervisorService = class SupervisorService {
             }));
             this.llm = new anthropic_1.ChatAnthropic({
                 apiKey: this.configService.get('ANTHROPIC_API_KEY'),
-                modelName: 'claude-3-7-sonnet-20250219',
+                modelName: this.configService.get('AI_MODEL'),
                 temperature: 0,
             });
             this.loggerService.log(JSON.stringify({
                 message: 'LLM initialized',
                 service: 'SupervisorService',
                 method: 'initialize',
-                model: 'claude-3-7-sonnet-20250219',
+                model: this.configService.get('AI_MODEL'),
             }));
             await this.createAgents();
             await this.createSupervisor();
@@ -138,7 +137,10 @@ let SupervisorService = class SupervisorService {
                     const filename = `audit_summary_report_${timestamp}.pdf`;
                     const outputPath = path.join(this.pdfOutputPath, filename);
                     const html = marked_1.marked.parse(content);
-                    const browser = await puppeteer_1.default.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                    const browser = await puppeteer_1.default.launch({
+                        headless: true,
+                        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+                    });
                     const page = await browser.newPage();
                     await page.setContent(`
               <html>
@@ -213,11 +215,13 @@ let SupervisorService = class SupervisorService {
                     title: zod_1.z.string().describe('The title of the PDF document'),
                 }),
             });
-            const promptMessage = new messages_1.SystemMessage(index_1.supervisorSummaryAgentPrompt);
             this.summarizeAgent = (0, prebuilt_1.createReactAgent)({
                 llm: this.llm,
                 tools: [pdfGeneratorTool],
-                prompt: promptMessage,
+                prompt: `
+Always provide the markdown content to the pdf_generator tool.
+Always use the pdf_generator tool to generate a PDF document from the markdown content.
+        `,
             });
             this.members = ['summarizer'];
             this.loggerService.log(JSON.stringify({
@@ -387,15 +391,7 @@ let SupervisorService = class SupervisorService {
                 dataCount: auditData.data.length,
                 sampleCount: Math.min(20, auditData.data.length),
             }));
-            const content = `
-AUDIT DATA:
-${JSON.stringify(auditData.data.slice(0, 20))}
-
-TASK: 
-${task || 'Create a detailed summary report of the audit data'}
-
-DATE: ${new Date().toISOString()}
-      `;
+            const content = (0, index_1.supervisorSummaryAgentPrompt)(JSON.stringify(auditData.data), task || 'Create a detailed summary report of the audit data', new Date().toISOString().split('T')[0]);
             this.loggerService.log(JSON.stringify({
                 message: 'Prepared content for summary generation',
                 service: 'SupervisorService',
@@ -463,7 +459,9 @@ DATE: ${new Date().toISOString()}
                 try {
                     const url = await this.getFileUrl(file);
                     const timestampMatch = file.match(/\d+/);
-                    const timestamp = timestampMatch ? parseInt(timestampMatch[0], 10) : 0;
+                    const timestamp = timestampMatch
+                        ? parseInt(timestampMatch[0], 10)
+                        : 0;
                     return {
                         filename: file,
                         url,

@@ -28,7 +28,7 @@ let AgentsController = class AgentsController {
         return this.ragService.askAgent(body.question, body.threadId || 'default');
     }
     async runSupervisor(body) {
-        return this.supervisorService.run(body.message);
+        return this.supervisorService.run(body.question, body.threadId || 'default');
     }
 };
 exports.AgentsController = AgentsController;

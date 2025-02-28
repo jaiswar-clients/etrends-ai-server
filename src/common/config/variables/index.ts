@@ -11,5 +11,6 @@ export const app = registerAs('APP', () => ({
   CLIENT_URL: process.env['CLIENT_URL'],
   APP_URL: process.env['APP_URL'],
   ANTHROPIC_API_KEY: process.env['ANTHROPIC_API_KEY'],
+  AI_MODEL: process.env['AI_MODEL'],
   OPENAI_API_KEY: process.env['OPENAI_API_KEY'],
 }));

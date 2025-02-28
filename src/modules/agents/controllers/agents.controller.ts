@@ -20,9 +20,7 @@ export class AgentsController {
   }
 
   @Post('report')
-  async runSupervisor(@Body() body: { message: string; threadId?: string }) {
-    return this.supervisorService.run(body.message);
+  async runSupervisor(@Body() body: { question: string; threadId?: string }) {
+    return this.supervisorService.run(body.question, body.threadId || 'default');
   }
-
-
 }

@@ -47,5 +47,9 @@ export class AppConfigDTO {
 
   @IsString()
   @IsNotEmpty()
+  AI_MODEL: string;
+
+  @IsString()
+  @IsNotEmpty()
   OPENAI_API_KEY: string;
 }

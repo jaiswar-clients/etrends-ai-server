@@ -73,5 +73,10 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
+], AppConfigDTO.prototype, "AI_MODEL", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
 ], AppConfigDTO.prototype, "OPENAI_API_KEY", void 0);
 //# sourceMappingURL=app.dto.js.map

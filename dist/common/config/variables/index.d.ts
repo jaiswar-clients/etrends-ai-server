@@ -9,6 +9,7 @@ export declare const app: (() => {
     CLIENT_URL: string;
     APP_URL: string;
     ANTHROPIC_API_KEY: string;
+    AI_MODEL: string;
     OPENAI_API_KEY: string;
 }) & import("@nestjs/config").ConfigFactoryKeyHost<{
     DATABASE_URL: string;
@@ -21,5 +22,6 @@ export declare const app: (() => {
     CLIENT_URL: string;
     APP_URL: string;
     ANTHROPIC_API_KEY: string;
+    AI_MODEL: string;
     OPENAI_API_KEY: string;
 }>;

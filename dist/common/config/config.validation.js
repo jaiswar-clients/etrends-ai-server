@@ -13,6 +13,7 @@ exports.validationSchema = Joi.object({
     CLIENT_URL: Joi.string().required(),
     APP_URL: Joi.string().required(),
     ANTHROPIC_API_KEY: Joi.string().required(),
+    AI_MODEL: Joi.string().required(),
     OPENAI_API_KEY: Joi.string().required(),
 });
 //# sourceMappingURL=config.validation.js.map

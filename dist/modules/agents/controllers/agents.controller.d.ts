@@ -14,7 +14,7 @@ export declare class AgentsController {
         threadId?: string;
     }): Promise<any>;
     runSupervisor(body: {
-        message: string;
+        question: string;
         threadId?: string;
     }): Promise<any>;
 }

@@ -115,7 +115,7 @@ export class SupervisorService implements OnModuleInit {
       // Initialize LLM
       this.llm = new ChatAnthropic({
         apiKey: this.configService.get('ANTHROPIC_API_KEY'),
-        modelName: 'claude-3-7-sonnet-20250219',
+        modelName: this.configService.get('AI_MODEL'),
         temperature: 0,
       });
 
@@ -124,7 +124,7 @@ export class SupervisorService implements OnModuleInit {
           message: 'LLM initialized',
           service: 'SupervisorService',
           method: 'initialize',
-          model: 'claude-3-7-sonnet-20250219',
+          model: this.configService.get('AI_MODEL'),
         }),
       );
 
@@ -196,7 +196,10 @@ export class SupervisorService implements OnModuleInit {
             const html = marked.parse(content);
 
             // Generate PDF using puppeteer
-            const browser = await puppeteer.launch({ headless: true,args:['--no-sandbox','--disable-setuid-sandbox'] });
+            const browser = await puppeteer.launch({
+              headless: true,
+              args: ['--no-sandbox', '--disable-setuid-sandbox'],
+            });
             const page = await browser.newPage();
 
             await page.setContent(`
@@ -284,12 +287,15 @@ export class SupervisorService implements OnModuleInit {
       );
 
       // Use the prompt from the imported file
-      const promptMessage = new SystemMessage(supervisorSummaryAgentPrompt);
+      //   const promptMessage = new SystemMessage(supervisorSummaryAgentPrompt);
 
       this.summarizeAgent = createReactAgent({
         llm: this.llm,
         tools: [pdfGeneratorTool],
-        prompt: promptMessage,
+        prompt: `
+Always provide the markdown content to the pdf_generator tool.
+Always use the pdf_generator tool to generate a PDF document from the markdown content.
+        `,
       });
       this.members = ['summarizer'];
 
@@ -526,15 +532,11 @@ export class SupervisorService implements OnModuleInit {
         }),
       );
 
-      const content = `
-AUDIT DATA:
-${JSON.stringify(auditData.data.slice(0, 20))}
-
-TASK: 
-${task || 'Create a detailed summary report of the audit data'}
-
-DATE: ${new Date().toISOString()}
-      `;
+      const content = supervisorSummaryAgentPrompt(
+        JSON.stringify(auditData.data),
+        task || 'Create a detailed summary report of the audit data',
+        new Date().toISOString().split('T')[0],
+      );
 
       this.loggerService.log(
         JSON.stringify({
@@ -615,7 +617,7 @@ DATE: ${new Date().toISOString()}
   async getAllReports() {
     try {
       const files = await fs.readdir(this.pdfOutputPath);
-      
+
       this.loggerService.log(
         JSON.stringify({
           message: 'Retrieved all report files',
@@ -625,15 +627,17 @@ DATE: ${new Date().toISOString()}
           files,
         }),
       );
-      
+
       // Process files and get URLs
       const filePromises = files.map(async (file) => {
         try {
           const url = await this.getFileUrl(file);
           // Extract timestamp from filename and convert to number
           const timestampMatch = file.match(/\d+/);
-          const timestamp = timestampMatch ? parseInt(timestampMatch[0], 10) : 0;
-          
+          const timestamp = timestampMatch
+            ? parseInt(timestampMatch[0], 10)
+            : 0;
+
           return {
             filename: file,
             url,
@@ -652,10 +656,10 @@ DATE: ${new Date().toISOString()}
           return null;
         }
       });
-      
+
       const results = await Promise.all(filePromises);
       const validResults = results.filter(Boolean);
-      
+
       this.loggerService.log(
         JSON.stringify({
           message: 'Processed all report files',
@@ -665,7 +669,7 @@ DATE: ${new Date().toISOString()}
           validFiles: validResults.length,
         }),
       );
-      
+
       return validResults;
     } catch (error) {
       this.loggerService.error(
