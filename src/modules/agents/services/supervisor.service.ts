@@ -527,13 +527,13 @@ Always use the pdf_generator tool to generate a PDF document from the markdown c
           message: 'Retrieved audit data',
           service: 'SupervisorService',
           method: 'run',
-          dataCount: auditData.data.length,
-          sampleCount: Math.min(20, auditData.data.length),
+          dataCount: auditData.length,
+          sampleCount: Math.min(20, auditData.length),
         }),
       );
 
       const content = supervisorSummaryAgentPrompt(
-        JSON.stringify(auditData.data),
+        JSON.stringify(auditData),
         task || 'Create a detailed summary report of the audit data',
         new Date().toISOString().split('T')[0],
       );

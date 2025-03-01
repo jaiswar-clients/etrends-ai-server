@@ -1,12 +1,14 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { RagService } from '../services/rag.service';
 import { SupervisorService } from '../services/supervisor.service';
+import { SelfRagService } from '../services/self-rag.service';
 
 @Controller('agents')
 export class AgentsController {
   constructor(
     private readonly ragService: RagService,
     private readonly supervisorService: SupervisorService,
+    private readonly selfRagService: SelfRagService,
   ) {}
 
   @Get('reports')

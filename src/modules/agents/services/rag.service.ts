@@ -1,13 +1,19 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  OnModuleInit,
+} from '@nestjs/common';
 import { MemorySaver } from '@langchain/langgraph';
 
+import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import {
   Annotation,
   AnnotationRoot,
   BinaryOperatorAggregate,
   CompiledStateGraph,
 } from '@langchain/langgraph';
-import { BaseMessage } from '@langchain/core/messages';
+import { BaseMessage, SystemMessage } from '@langchain/core/messages';
 import { createRetrieverTool } from 'langchain/tools/retriever';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { HNSWLib } from '@langchain/community/vectorstores/hnswlib';
@@ -22,9 +28,10 @@ import { StateGraph } from '@langchain/langgraph';
 import { HumanMessage } from '@langchain/core/messages';
 import { DatabaseService } from '@/common/db/db.service';
 import { ConfigService } from '@/common/config/services/config.service';
-import { Document } from '@langchain/core/documents';
+
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { LoggerService } from '@/common/logger/services/logger.service';
 
 @Injectable()
 export class RagService implements OnModuleInit {
@@ -39,106 +46,233 @@ export class RagService implements OnModuleInit {
   private vectorStore: HNSWLib;
   private readonly vectorStorePath: string;
   private app: CompiledStateGraph<any, any, any, any, any, any>;
+  private conversationMemory: Map<string, BaseMessage[]> = new Map();
 
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly configService: ConfigService,
+    private readonly loggerService: LoggerService,
   ) {
     this.vectorStorePath = path.join(process.cwd(), 'vector_store');
   }
 
   async onModuleInit() {
     try {
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Initializing RAG service',
+          service: 'RagService',
+          method: 'onModuleInit',
+        }),
+      );
+
       await this.initialize();
+
       const compiledGraph = await this.getGraph();
       if (compiledGraph) {
         this.app = compiledGraph;
-        console.log('Graph compiled successfully');
+        this.loggerService.log(
+          JSON.stringify({
+            message: 'Graph compiled successfully',
+            service: 'RagService',
+            method: 'onModuleInit',
+          }),
+        );
       } else {
         throw new Error('Failed to compile graph');
       }
     } catch (error) {
-      console.error('Error initializing RAG service:', error);
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error initializing RAG service',
+          service: 'RagService',
+          method: 'onModuleInit',
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        }),
+      );
       throw error;
     }
   }
 
   async initialize(createVectorStore: boolean = false) {
-    this.embeddings = new OpenAIEmbeddings({
-      apiKey: this.configService.get('OPENAI_API_KEY'),
-    });
-    this.GraphState = Annotation.Root({
-      messages: Annotation<BaseMessage[]>({
-        reducer: (x, y) => x.concat(y),
-        default: () => [],
-      }),
-    });
-    this.llm = new ChatAnthropic({
-      apiKey: this.configService.get('ANTHROPIC_API_KEY'),
-      modelName: 'claude-3-5-sonnet-20240620',
-    });
-    if (createVectorStore) {
-      await this.createVectorStore();
-    }
-
-    await this.loadVectorStore();
-
-    const retriever = await this.loadVectorStoreAsRetriever();
-
-    this.tool = createRetrieverTool(retriever, {
-      name: 'retrieve_audit_data',
-      description: 'Search and return information about audit data.',
-    });
-    this.tools = [this.tool];
-    this.toolNode = new ToolNode<typeof this.GraphState.State>(this.tools);
-  }
-
-  async loadVectorStore() {
-    this.vectorStore = await HNSWLib.load(
-      this.vectorStorePath,
-      this.embeddings,
-    );
-  }
-
-  async createVectorStore() {
     try {
-      await fs.mkdir(path.dirname(this.vectorStorePath), { recursive: true });
-
-      const auditData = await this.databaseService.getAIAuditProgressData();
-
-      const documents = auditData.data.map((item: any) => {
-        return new Document({
-          pageContent: JSON.stringify(item),
-          metadata: { source: 'audit_data', loc: item },
-        });
-      });
-
-      this.vectorStore = await HNSWLib.fromDocuments(
-        documents,
-        this.embeddings,
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Starting RAG service initialization',
+          service: 'RagService',
+          method: 'initialize',
+          createVectorStore,
+        }),
       );
 
-      await this.vectorStore.save(this.vectorStorePath);
+      this.embeddings = new OpenAIEmbeddings({
+        apiKey: this.configService.get('OPENAI_API_KEY'),
+      });
+
+      this.GraphState = Annotation.Root({
+        messages: Annotation<BaseMessage[]>({
+          reducer: (x, y) => x.concat(y),
+          default: () => [],
+        }),
+      });
+
+      this.llm = new ChatAnthropic({
+        apiKey: this.configService.get('ANTHROPIC_API_KEY'),
+        modelName: this.configService.get('AI_MODEL'),
+      });
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'LLM and embeddings initialized',
+          service: 'RagService',
+          method: 'initialize',
+          model: this.configService.get('AI_MODEL'),
+        }),
+      );
+
+      if (createVectorStore) {
+        const auditData = await this.databaseService.auditDataForVectorStore();
+        await this.createVectorStore(
+          auditData as string,
+          `${this.vectorStorePath}/audit_data`,
+          'audit_data',
+        );
+
+        const observationData =
+          await this.databaseService.observationDataForVectorStore();
+        await this.createVectorStore(
+          observationData as string,
+          `${this.vectorStorePath}/observation_data`,
+          'observation_data',
+        );
+      }
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Vector store loaded',
+          service: 'RagService',
+          method: 'initialize',
+        }),
+      );
+
+      const auditDataRetriever = await this.loadVectorStoreAsRetriever(
+        `${this.vectorStorePath}/audit_data`,
+      );
+
+      const observationDataRetriever = await this.loadVectorStoreAsRetriever(
+        `${this.vectorStorePath}/observation_data`,
+      );
+
+      if (!auditDataRetriever || !observationDataRetriever) {
+        throw new Error('Vector store not initialized');
+      }
+
+      const auditDataTool = createRetrieverTool(auditDataRetriever, {
+        name: 'retrieve_audit_data',
+        description: 'Search and return information about audit data.',
+      });
+
+      const observationDataTool = createRetrieverTool(
+        observationDataRetriever,
+        {
+          name: 'retrieve_observation_data',
+          description: 'Search and return information about observation data.',
+        },
+      );
+
+      this.tools = [auditDataTool, observationDataTool];
+      this.toolNode = new ToolNode<typeof this.GraphState.State>(this.tools);
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Tools and retriever initialized',
+          service: 'RagService',
+          method: 'initialize',
+          tools: this.tools.map((t) => t.name),
+        }),
+      );
     } catch (error) {
-      console.error('Error creating vector store:', error);
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error in RAG initialization',
+          service: 'RagService',
+          method: 'initialize',
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          createVectorStore,
+        }),
+      );
       throw error;
     }
   }
 
-  async loadVectorStoreAsRetriever() {
-    const vectorStore = await HNSWLib.load(
-      this.vectorStorePath,
-      this.embeddings,
-    );
+  async createVectorStore(
+    data: string,
+    vectorStorePath: string,
+    sourceName?: string,
+  ) {
+    try {
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Creating vector store',
+          service: 'RagService',
+          method: 'createVectorStore',
+          dataLength: data.length,
+        }),
+      );
+
+      const textSplitter = new RecursiveCharacterTextSplitter({
+        chunkSize: 500,
+        chunkOverlap: 50,
+      });
+      const docSplits = await textSplitter.splitText(data);
+
+      await fs.mkdir(path.dirname(vectorStorePath), { recursive: true });
+
+      const vectorStore = await HNSWLib.fromTexts(
+        docSplits,
+        [{ source: sourceName }],
+        this.embeddings,
+      );
+
+      await vectorStore.save(vectorStorePath);
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Vector store created and saved successfully',
+          service: 'RagService',
+          method: 'createVectorStore',
+          documentCount: docSplits.length,
+          path: this.vectorStorePath,
+        }),
+      );
+    } catch (error) {
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error creating vector store',
+          service: 'RagService',
+          method: 'createVectorStore',
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        }),
+      );
+      throw error;
+    }
+  }
+
+  async loadVectorStoreAsRetriever(vectorStorePath: string) {
+    const vectorStore = await HNSWLib.load(vectorStorePath, this.embeddings);
     const retriever = vectorStore.asRetriever();
     return retriever;
   }
 
-  async similaritySearch(query: string, k = 4) {
-    if (!this.vectorStore) {
+  async similaritySearch(query: string, vectorStorePath: string, k = 4) {
+    const vectorStore = await HNSWLib.load(vectorStorePath, this.embeddings);
+    if (!vectorStore) {
       throw new Error('Vector store not initialized');
     }
-    return await this.vectorStore.similaritySearch(query, k);
+    return await vectorStore.similaritySearchWithScore(query, k);
   }
 
   // ************ Edges ************
@@ -152,7 +286,15 @@ export class RagService implements OnModuleInit {
    */
   shouldRetrieve(state: typeof this.GraphState.State): string {
     const { messages } = state;
-    console.log('---DECIDE TO RETRIEVE---');
+    this.loggerService.log(
+      JSON.stringify({
+        message: 'Deciding whether to retrieve',
+        service: 'RagService',
+        method: 'shouldRetrieve',
+        messageCount: messages.length,
+      }),
+    );
+
     const lastMessage = messages[messages.length - 1];
 
     if (
@@ -160,9 +302,24 @@ export class RagService implements OnModuleInit {
       Array.isArray(lastMessage.tool_calls) &&
       lastMessage.tool_calls.length
     ) {
-      console.log('---DECISION: RETRIEVE---');
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Decision: Retrieve',
+          service: 'RagService',
+          method: 'shouldRetrieve',
+          toolCalls: lastMessage.tool_calls.map((tc) => tc.name),
+        }),
+      );
       return 'retrieve';
     }
+
+    this.loggerService.log(
+      JSON.stringify({
+        message: 'Decision: End',
+        service: 'RagService',
+        method: 'shouldRetrieve',
+      }),
+    );
     // If there are no tool calls then we finish.
     return END;
   }
@@ -262,7 +419,20 @@ export class RagService implements OnModuleInit {
   async agent(
     state: typeof this.GraphState.State,
   ): Promise<Partial<typeof this.GraphState.State>> {
-    console.log('---CALL AGENT---');
+    this.loggerService.log(
+      JSON.stringify({
+        message: 'Calling agent',
+        service: 'RagService',
+        method: 'agent',
+        messageCount: state.messages.length,
+        firstMessageContent:
+          state.messages.length > 0
+            ? typeof state.messages[0].content === 'string'
+              ? state.messages[0].content.substring(0, 100) + '...'
+              : 'Non-string content'
+            : 'No messages',
+      }),
+    );
 
     const { messages } = state;
     // Find the AIMessage which contains the `give_relevance_score` tool call,
@@ -281,10 +451,47 @@ export class RagService implements OnModuleInit {
 
     const model = this.llm.bindTools(this.tools);
 
-    const response = await model.invoke(filteredMessages);
-    return {
-      messages: [response],
-    };
+    try {
+      const systemMessage = new SystemMessage(
+        `You are a helpful assistant that can answer questions based the audit data on Audit Data and Observation Data. IF user ask anything inrelevant or out of context question don't answer and say "I'm sorry, I can only answer questions based on the audit data and observation data."
+        if user ask about audit data, use the retrieve_audit_data tool.
+        if user ask about observation data, use the retrieve_observation_data tool.
+        NOTE: You should answer the question based on the context but if context has any other information other then question then modify the information in context to answer the question.
+        NOTE: Answer should be in markdown format.
+        NOTE: Pay attention to the most recent question from the user and answer it specifically, while maintaining context from previous questions if relevant.`,
+      );
+      console.log([systemMessage, ...filteredMessages]);
+      const response = await model.invoke([systemMessage, ...filteredMessages]);
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Agent response received',
+          service: 'RagService',
+          method: 'agent',
+          hasToolCalls:
+            'tool_calls' in response && Array.isArray(response.tool_calls),
+          toolCallCount:
+            'tool_calls' in response && Array.isArray(response.tool_calls)
+              ? response.tool_calls.length
+              : 0,
+        }),
+      );
+
+      return {
+        messages: [response],
+      };
+    } catch (error) {
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error in agent invocation',
+          service: 'RagService',
+          method: 'agent',
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        }),
+      );
+      throw error;
+    }
   }
 
   /**
@@ -395,7 +602,8 @@ Formulate an improved question:`,
     workflow.addEdge('rewrite' as any, 'agent' as any);
 
     // Compile the workflow before returning
-    return workflow.compile({ checkpointer });
+    // return workflow.compile({ checkpointer });
+    return workflow.compile();
   }
 
   getTokenUsage(response: any[]) {
@@ -408,17 +616,61 @@ Formulate an improved question:`,
   }
 
   async askAgent(question: string, threadId: string = 'default') {
-    const response = await this.app.invoke(
-      {
-        messages: [new HumanMessage(question)],
-      },
-      {
-        configurable: {
-          thread_id: threadId,
-        },
-      },
-    );
+    try {
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Starting agent query',
+          service: 'RagService',
+          method: 'askAgent',
+          question,
+          threadId,
+        }),
+      );
 
-    return response.messages[response.messages.length - 1].content;
+      // Generate a unique thread ID for each question to prevent context carryover
+      const uniqueThreadId = `${threadId}_${Date.now()}`;
+
+      const response = await this.app.invoke(
+        {
+          messages: [new HumanMessage(question)],
+        },
+        {
+          configurable: {
+            thread_id: uniqueThreadId,
+          },
+        },
+      );
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Agent query completed successfully',
+          service: 'RagService',
+          method: 'askAgent',
+          messageCount: response.messages.length,
+          responseLength:
+            response.messages[response.messages.length - 1].content.length,
+          threadId: uniqueThreadId,
+        }),
+      );
+
+      return response.messages[response.messages.length - 1].content;
+    } catch (error) {
+      console.log({ error });
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error asking agent',
+          service: 'RagService',
+          method: 'askAgent',
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          question,
+          threadId,
+        }),
+      );
+      throw new HttpException(
+        'Error asking agent',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 }

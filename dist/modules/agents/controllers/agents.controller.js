@@ -16,10 +16,12 @@ exports.AgentsController = void 0;
 const common_1 = require("@nestjs/common");
 const rag_service_1 = require("../services/rag.service");
 const supervisor_service_1 = require("../services/supervisor.service");
+const self_rag_service_1 = require("../services/self-rag.service");
 let AgentsController = class AgentsController {
-    constructor(ragService, supervisorService) {
+    constructor(ragService, supervisorService, selfRagService) {
         this.ragService = ragService;
         this.supervisorService = supervisorService;
+        this.selfRagService = selfRagService;
     }
     async getAllReports() {
         return this.supervisorService.getAllReports();
@@ -55,6 +57,7 @@ __decorate([
 exports.AgentsController = AgentsController = __decorate([
     (0, common_1.Controller)('agents'),
     __metadata("design:paramtypes", [rag_service_1.RagService,
-        supervisor_service_1.SupervisorService])
+        supervisor_service_1.SupervisorService,
+        self_rag_service_1.SelfRagService])
 ], AgentsController);
 //# sourceMappingURL=agents.controller.js.map

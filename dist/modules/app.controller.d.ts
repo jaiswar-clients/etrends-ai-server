@@ -4,8 +4,5 @@ export declare class AppController {
     private readonly appService;
     private databaseService;
     constructor(appService: AppService, databaseService: DatabaseService);
-    getAIAuditProgressData(): Promise<{
-        success: boolean;
-        data: any;
-    }>;
+    getAIAuditProgressData(): Promise<import("@/common/db/db.service").IAuditData[]>;
 }

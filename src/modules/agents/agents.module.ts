@@ -4,10 +4,11 @@ import { AgentsService } from './services/agents.service';
 import { RagService } from './services/rag.service';
 import { SupervisorService } from './services/supervisor.service';
 import { DatabaseModule } from '@/common/db/db.module';
+import { SelfRagService } from './services/self-rag.service';
 
 @Module({
   imports: [DatabaseModule],
   controllers: [AgentsController],
-  providers: [AgentsService, RagService, SupervisorService],
+  providers: [AgentsService, RagService, SupervisorService, SelfRagService],
 })
 export class AgentsModule {}
