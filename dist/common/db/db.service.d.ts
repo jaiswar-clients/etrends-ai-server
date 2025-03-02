@@ -74,11 +74,11 @@ export declare class DatabaseService implements OnModuleInit {
     constructor(db: sql.ConnectionPool, loggerService: LoggerService, configService: ConfigService);
     onModuleInit(): Promise<void>;
     getAIAuditProgressData(): Promise<IAuditData[]>;
-    auditDataForVectorStore(): Promise<import("@langchain/core/messages").MessageContent>;
+    auditDataForVectorStore(): Promise<string>;
     private createAuditDistribution;
     private formatAuditDistribution;
     getObservationData(): Promise<IObservation[]>;
-    observationDataForVectorStore(): Promise<import("@langchain/core/messages").MessageContent>;
+    observationDataForVectorStore(): Promise<string>;
     private createDistribution;
     private formatDistribution;
 }

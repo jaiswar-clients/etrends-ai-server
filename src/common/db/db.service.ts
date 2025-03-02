@@ -74,28 +74,19 @@ export interface IAuditData {
 @Injectable()
 export class DatabaseService implements OnModuleInit {
   private readonly logger = new Logger(DatabaseService.name);
-  private llm: ChatAnthropic;
+  private llm: Anthropic;
 
   constructor(
     @Inject('MSSQL_CONNECTION') private readonly db: sql.ConnectionPool,
     private readonly loggerService: LoggerService,
     private readonly configService: ConfigService,
   ) {
-    this.llm = new ChatAnthropic({
+    this.llm = new Anthropic({
       apiKey: this.configService.get('ANTHROPIC_API_KEY'),
-      model: this.configService.get('AI_MODEL'),
-      createClient: (options) => {
-        return new Anthropic({
-          apiKey: this.configService.get('ANTHROPIC_API_KEY'),
-        });
-      },
     });
   }
 
-  async onModuleInit() {
-    // const result = await this.observationDataForVectorStore();
-    // console.log(result);
-  }
+  async onModuleInit() {}
 
   async getAIAuditProgressData(): Promise<IAuditData[]> {
     try {
@@ -206,22 +197,52 @@ export class DatabaseService implements OnModuleInit {
         textualData += `--- \n`;
       });
 
-      const response = await this.llm.invoke([
-        new SystemMessage(
-          'You are a helpful assistant that summarizes audit data. and create unique and help full insights from the data. This data will be used for RAG and will be stored in a vector database.',
-        ),
-        new HumanMessage(`
-            This is the manual preprocessed data:
-            ${textualData}
+      const response = await this.llm.messages.create({
+        model: this.configService.get('AI_MODEL'),
+        max_tokens: 10000,
+        temperature: 0.7,
+        system: `
+You are a helpful assistant that process the observation data, and create helpfull insights from the data. This data will be used for RAG and will be stored in a vector database.
 
-            Actual Strigified Data:
-            ${JSON.stringify(result)}
-            `),
-      ]);
+You have to think possible questions user can ask and create detailed processed data for vector store
+DON't Repeat any data from the user input you have to create new insights from the data.
+            `,
+        messages: [
+          {
+            role: 'user',
+            content: textualData,
+          },
+        ],
+      });
 
-      //   console.log(response.content);
+      // Check if content exists and handle different content types
+      const content = response.content[0];
+      if (!content) {
+        this.loggerService.error(
+          JSON.stringify({
+            message: 'Error generating vector store data: No content returned',
+            data: { response },
+          }),
+        );
+        return '';
+      }
 
-      return response.content;
+      // Handle different content types
+      if ('text' in content) {
+        return `
+        ${textualData}
+        ${content.text}
+        `;
+      } else {
+        this.loggerService.error(
+          JSON.stringify({
+            message:
+              'Error generating vector store data: Unexpected content format',
+            data: { contentType: typeof content },
+          }),
+        );
+        return '';
+      }
     } catch (error) {
       console.error('Error generating audit vector data:', error);
       return '';
@@ -397,22 +418,70 @@ export class DatabaseService implements OnModuleInit {
         textualData += `--- \n `; // Separator for readability
       });
 
-      const response = await this.llm.invoke([
-        new SystemMessage(
-          'You are a helpful assistant that summarizes audit data. and create unique and help full insights from the data. This data will be used for RAG and will be stored in a vector database.',
-        ),
-        new HumanMessage(`
-            This is the manual preprocessed data:
-            ${textualData}
+      const response = await this.llm.messages.create({
+        model: this.configService.get('AI_MODEL'),
+        max_tokens: 10000,
+        temperature: 0.7,
+        system: `
+You are a helpful assistant that process the observation data, and create helpfull insights from the data. This data will be used for RAG and will be stored in a vector database.
 
-            Actual Strigified Data:
-            ${JSON.stringify(result)}
-            `),
-      ]);
+Example of questions user can ask:
+Questions.
+1.How many open obs
+2.How many repeat Obs
+3.Risk wise total obs
+4.How many obs breached
+5.How many not due obs.
+6.Location wise breached obs
+7.Risk type wise breached obs
 
-      return response.content;
+
+You have to think possible questions user can ask and create detailed processed data for vector store
+DON't Repeat any data from the user input you have to create new insights from the data.
+          `,
+        messages: [
+          {
+            role: 'user',
+            content: textualData,
+          },
+        ],
+      });
+
+      // Check if content exists and handle different content types
+      const content = response.content[0];
+      if (!content) {
+        this.loggerService.error(
+          JSON.stringify({
+            message: 'Error generating vector store data: No content returned',
+            data: { response },
+          }),
+        );
+        return '';
+      }
+
+      // Handle different content types
+      if ('text' in content) {
+        return `
+        ${textualData}
+        ${content.text}
+        `;
+      } else {
+        this.loggerService.error(
+          JSON.stringify({
+            message:
+              'Error generating vector store data: Unexpected content format',
+            data: { contentType: typeof content },
+          }),
+        );
+        return '';
+      }
     } catch (error) {
-      console.error('Error generating vector store data:', error);
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error generating vector store data',
+          data: { error },
+        }),
+      );
       return ''; // Return empty string to prevent vectorization failures
     }
   }

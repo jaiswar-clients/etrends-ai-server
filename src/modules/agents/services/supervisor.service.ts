@@ -116,7 +116,7 @@ export class SupervisorService implements OnModuleInit {
       this.llm = new ChatAnthropic({
         apiKey: this.configService.get('ANTHROPIC_API_KEY'),
         modelName: this.configService.get('AI_MODEL'),
-        temperature: 0,
+        temperature: 0.7,
       });
 
       this.loggerService.log(

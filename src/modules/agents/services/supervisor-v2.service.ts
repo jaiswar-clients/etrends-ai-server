@@ -140,6 +140,16 @@ Your analysis should include:
 4. Any anomalies or areas of concern
 
 Format your response as detailed markdown that can be converted to a professional PDF report.
+
+Don't include any text with ## except this use any other heading as needed.
+
+Example:
+NOT USE THIS
+## Locations Identified in the Report: 1. Mumbai (MUM) - 13 audits 2. Pune - 7 audits
+
+USE THIS
+### Locations Identified in the Report: 1. Mumbai (MUM) - 13 audits 2. Pune - 7 audits
+
 `;
 
       const analysisResponse = await this.anthropic.messages.create({
@@ -234,8 +244,23 @@ Format your response as detailed markdown that can be converted to a professiona
       const filename = `audit_summary_report_${timestamp}.pdf`;
       const outputPath = path.join(this.pdfOutputPath, filename);
 
-      // Convert markdown to HTML
-      const html = marked.parse(content);
+      // Convert markdown to HTML - without the removed options
+      marked.setOptions({
+        gfm: true,
+      });
+      
+      // Convert markdown to HTML and ensure it's a string
+      const html = await Promise.resolve(marked.parse(content));
+      
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Markdown converted to HTML',
+          service: 'SupervisorV2Service',
+          method: 'generatePDF',
+          contentLength: content.length,
+          htmlLength: html.length,
+        }),
+      );
 
       // Generate PDF using puppeteer
       const browser = await puppeteer.launch({
@@ -243,6 +268,20 @@ Format your response as detailed markdown that can be converted to a professiona
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
       });
       const page = await browser.newPage();
+
+      // Read logo file and convert to base64
+      const logoPath = path.join(process.cwd(), 'public', 'images', 'logo.jpg');
+      const logoBuffer = await fs.readFile(logoPath);
+      const logoBase64 = `data:image/jpeg;base64,${logoBuffer.toString('base64')}`;
+      
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Logo image encoded to base64',
+          service: 'SupervisorV2Service',
+          method: 'generatePDF',
+          logoPath,
+        }),
+      );
 
       await page.setContent(`
         <html>
@@ -252,46 +291,101 @@ Format your response as detailed markdown that can be converted to a professiona
               body {
                 font-family: Arial, sans-serif;
                 margin: 40px;
+                margin-top: 15px; /* Increased top margin to accommodate the logo */
                 line-height: 1.6;
               }
               h1 {
                 color: #333;
                 border-bottom: 1px solid #ddd;
                 padding-bottom: 10px;
+                margin-top: 30px; /* Ensure first heading doesn't overlap with logo */
               }
               h2 {
                 color: #444;
                 margin-top: 20px;
+                font-size: 1.5em;
+              }
+              h3 {
+                color: #555;
+                margin-top: 16px;
+                font-size: 1.2em;
               }
               p {
                 margin-bottom: 16px;
               }
               ul, ol {
                 margin-bottom: 16px;
+                padding-left: 20px;
+              }
+              li {
+                margin-bottom: 8px;
+              }
+              /* Ensure proper spacing at the top of the document */
+              .content {
+                padding-top: 20px;
+              }
+              /* Add styling for code blocks */
+              pre {
+                background-color: #f5f5f5;
+                padding: 10px;
+                border-radius: 5px;
+                overflow-x: auto;
+              }
+              code {
+                font-family: monospace;
+              }
+              /* Table styling */
+              table {
+                border-collapse: collapse;
+                width: 100%;
+                margin-bottom: 16px;
+              }
+              th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+              }
+              th {
+                background-color: #f2f2f2;
               }
             </style>
           </head>
           <body>
-            ${html}
+            <div class="content">
+              ${html}
+            </div>
           </body>
         </html>
       `);
+
 
       await page.pdf({
         path: outputPath,
         format: 'A4',
         margin: {
-          top: '10px',
+          top: '80px', /* Increased top margin to accommodate the logo */
           right: '20px',
-          bottom: '10px',
-          left: '10px',
+          bottom: '20px',
+          left: '20px',
         },
+        displayHeaderFooter: true,
+        headerTemplate: `
+          <div style="width: 100%; height: 60px; padding: 0; position: relative; border-bottom: 1px solid #eee;">
+            <img src="${logoBase64}" style="height: 40px; position: absolute; top: 10px; left: 20px;" />
+          </div>
+        `,
+        footerTemplate: `
+          <div style="width: 100%; font-size: 9px; text-align: center; color: #777;">
+            Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+          </div>
+        `,
       });
+      
       await browser.close();
 
       this.loggerService.log(
         JSON.stringify({
-          message: 'PDF generated successfully',
+          message: 'PDF generated successfully with logo',
           service: 'SupervisorV2Service',
           method: 'generatePDF',
           filename,
@@ -304,7 +398,7 @@ Format your response as detailed markdown that can be converted to a professiona
     } catch (error) {
       this.loggerService.error(
         JSON.stringify({
-          message: 'Error generating PDF',
+          message: 'Error generating PDF with logo',
           service: 'SupervisorV2Service',
           method: 'generatePDF',
           error: error instanceof Error ? error.message : String(error),
@@ -342,7 +436,7 @@ Format your response as detailed markdown that can be converted to a professiona
       );
 
       const content = supervisorSummaryAgentPrompt(
-        JSON.stringify(auditData),
+        JSON.stringify(auditData.slice(0,20)),
         task || 'Create a detailed summary report of the audit data',
         new Date().toISOString().split('T')[0],
       );

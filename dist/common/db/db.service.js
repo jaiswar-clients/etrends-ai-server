@@ -19,8 +19,6 @@ const common_1 = require("@nestjs/common");
 const sql = require("mssql");
 const logger_service_1 = require("../logger/services/logger.service");
 const config_service_1 = require("../config/services/config.service");
-const anthropic_1 = require("@langchain/anthropic");
-const messages_1 = require("@langchain/core/messages");
 const sdk_1 = require("@anthropic-ai/sdk");
 let DatabaseService = DatabaseService_1 = class DatabaseService {
     constructor(db, loggerService, configService) {
@@ -28,18 +26,11 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
         this.loggerService = loggerService;
         this.configService = configService;
         this.logger = new common_1.Logger(DatabaseService_1.name);
-        this.llm = new anthropic_1.ChatAnthropic({
+        this.llm = new sdk_1.default({
             apiKey: this.configService.get('ANTHROPIC_API_KEY'),
-            model: this.configService.get('AI_MODEL'),
-            createClient: (options) => {
-                return new sdk_1.default({
-                    apiKey: this.configService.get('ANTHROPIC_API_KEY'),
-                });
-            },
         });
     }
-    async onModuleInit() {
-    }
+    async onModuleInit() { }
     async getAIAuditProgressData() {
         try {
             const result = await this.db
@@ -106,17 +97,44 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 textualData += `Period: ${new Date(audit.auditFrom).toLocaleDateString()} - ${new Date(audit.Auditto).toLocaleDateString()}. `;
                 textualData += `--- \n`;
             });
-            const response = await this.llm.invoke([
-                new messages_1.SystemMessage('You are a helpful assistant that summarizes audit data. and create unique and help full insights from the data. This data will be used for RAG and will be stored in a vector database.'),
-                new messages_1.HumanMessage(`
-            This is the manual preprocessed data:
-            ${textualData}
+            const response = await this.llm.messages.create({
+                model: this.configService.get('AI_MODEL'),
+                max_tokens: 10000,
+                temperature: 0.7,
+                system: `
+You are a helpful assistant that process the observation data, and create helpfull insights from the data. This data will be used for RAG and will be stored in a vector database.
 
-            Actual Strigified Data:
-            ${JSON.stringify(result)}
-            `),
-            ]);
-            return response.content;
+You have to think possible questions user can ask and create detailed processed data for vector store
+DON't Repeat any data from the user input you have to create new insights from the data.
+            `,
+                messages: [
+                    {
+                        role: 'user',
+                        content: textualData,
+                    },
+                ],
+            });
+            const content = response.content[0];
+            if (!content) {
+                this.loggerService.error(JSON.stringify({
+                    message: 'Error generating vector store data: No content returned',
+                    data: { response },
+                }));
+                return '';
+            }
+            if ('text' in content) {
+                return `
+        ${textualData}
+        ${content.text}
+        `;
+            }
+            else {
+                this.loggerService.error(JSON.stringify({
+                    message: 'Error generating vector store data: Unexpected content format',
+                    data: { contentType: typeof content },
+                }));
+                return '';
+            }
         }
         catch (error) {
             console.error('Error generating audit vector data:', error);
@@ -224,20 +242,61 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
                 textualData += `Age: ${observation.Age} days. `;
                 textualData += `--- \n `;
             });
-            const response = await this.llm.invoke([
-                new messages_1.SystemMessage('You are a helpful assistant that summarizes audit data. and create unique and help full insights from the data. This data will be used for RAG and will be stored in a vector database.'),
-                new messages_1.HumanMessage(`
-            This is the manual preprocessed data:
-            ${textualData}
+            const response = await this.llm.messages.create({
+                model: this.configService.get('AI_MODEL'),
+                max_tokens: 10000,
+                temperature: 0.7,
+                system: `
+You are a helpful assistant that process the observation data, and create helpfull insights from the data. This data will be used for RAG and will be stored in a vector database.
 
-            Actual Strigified Data:
-            ${JSON.stringify(result)}
-            `),
-            ]);
-            return response.content;
+Example of questions user can ask:
+Questions.
+1.How many open obs
+2.How many repeat Obs
+3.Risk wise total obs
+4.How many obs breached
+5.How many not due obs.
+6.Location wise breached obs
+7.Risk type wise breached obs
+
+
+You have to think possible questions user can ask and create detailed processed data for vector store
+DON't Repeat any data from the user input you have to create new insights from the data.
+          `,
+                messages: [
+                    {
+                        role: 'user',
+                        content: textualData,
+                    },
+                ],
+            });
+            const content = response.content[0];
+            if (!content) {
+                this.loggerService.error(JSON.stringify({
+                    message: 'Error generating vector store data: No content returned',
+                    data: { response },
+                }));
+                return '';
+            }
+            if ('text' in content) {
+                return `
+        ${textualData}
+        ${content.text}
+        `;
+            }
+            else {
+                this.loggerService.error(JSON.stringify({
+                    message: 'Error generating vector store data: Unexpected content format',
+                    data: { contentType: typeof content },
+                }));
+                return '';
+            }
         }
         catch (error) {
-            console.error('Error generating vector store data:', error);
+            this.loggerService.error(JSON.stringify({
+                message: 'Error generating vector store data',
+                data: { error },
+            }));
             return '';
         }
     }

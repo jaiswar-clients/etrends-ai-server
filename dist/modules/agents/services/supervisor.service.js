@@ -81,7 +81,7 @@ let SupervisorService = class SupervisorService {
             this.llm = new anthropic_1.ChatAnthropic({
                 apiKey: this.configService.get('ANTHROPIC_API_KEY'),
                 modelName: this.configService.get('AI_MODEL'),
-                temperature: 0,
+                temperature: 0.7,
             });
             this.loggerService.log(JSON.stringify({
                 message: 'LLM initialized',
