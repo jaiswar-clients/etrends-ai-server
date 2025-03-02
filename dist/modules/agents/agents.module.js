@@ -14,6 +14,7 @@ const rag_service_1 = require("./services/rag.service");
 const supervisor_service_1 = require("./services/supervisor.service");
 const db_module_1 = require("../../common/db/db.module");
 const self_rag_service_1 = require("./services/self-rag.service");
+const supervisor_v2_service_1 = require("./services/supervisor-v2.service");
 let AgentsModule = class AgentsModule {
 };
 exports.AgentsModule = AgentsModule;
@@ -21,7 +22,7 @@ exports.AgentsModule = AgentsModule = __decorate([
     (0, common_1.Module)({
         imports: [db_module_1.DatabaseModule],
         controllers: [agents_controller_1.AgentsController],
-        providers: [agents_service_1.AgentsService, rag_service_1.RagService, supervisor_service_1.SupervisorService, self_rag_service_1.SelfRagService],
+        providers: [agents_service_1.AgentsService, rag_service_1.RagService, supervisor_service_1.SupervisorService, self_rag_service_1.SelfRagService, supervisor_v2_service_1.SupervisorV2Service],
     })
 ], AgentsModule);
 //# sourceMappingURL=agents.module.js.map

@@ -417,9 +417,7 @@ Always use the pdf_generator tool to generate a PDF document from the markdown c
         }),
       );
 
-      const graph = workflow.compile({
-        checkpointer,
-      });
+      const graph = workflow.compile();
       this.supervisor = graph;
 
       this.loggerService.log(
@@ -471,10 +469,10 @@ Always use the pdf_generator tool to generate a PDF document from the markdown c
           ],
         },
         {
-          configurable: {
-            thread_id: threadId,
-          },
-          recursionLimit: 30,
+        //   configurable: {
+        //     thread_id: threadId,
+        //   },
+          recursionLimit: 10,
         },
       );
 
@@ -532,8 +530,10 @@ Always use the pdf_generator tool to generate a PDF document from the markdown c
         }),
       );
 
+
       const content = supervisorSummaryAgentPrompt(
-        JSON.stringify(auditData),
+        // JSON.stringify(auditData),
+        JSON.stringify(auditData.slice(0, 10)),
         task || 'Create a detailed summary report of the audit data',
         new Date().toISOString().split('T')[0],
       );

@@ -21,6 +21,7 @@ const logger_service_1 = require("../logger/services/logger.service");
 const config_service_1 = require("../config/services/config.service");
 const anthropic_1 = require("@langchain/anthropic");
 const messages_1 = require("@langchain/core/messages");
+const sdk_1 = require("@anthropic-ai/sdk");
 let DatabaseService = DatabaseService_1 = class DatabaseService {
     constructor(db, loggerService, configService) {
         this.db = db;
@@ -30,6 +31,11 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
         this.llm = new anthropic_1.ChatAnthropic({
             apiKey: this.configService.get('ANTHROPIC_API_KEY'),
             model: this.configService.get('AI_MODEL'),
+            createClient: (options) => {
+                return new sdk_1.default({
+                    apiKey: this.configService.get('ANTHROPIC_API_KEY'),
+                });
+            },
         });
     }
     async onModuleInit() {

@@ -4,6 +4,7 @@ import { LoggerService } from '../logger/services/logger.service';
 import { ConfigService } from '../config/services/config.service';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import Anthropic from '@anthropic-ai/sdk';
 
 export interface IObservation {
   ID: number;
@@ -83,6 +84,11 @@ export class DatabaseService implements OnModuleInit {
     this.llm = new ChatAnthropic({
       apiKey: this.configService.get('ANTHROPIC_API_KEY'),
       model: this.configService.get('AI_MODEL'),
+      createClient: (options) => {
+        return new Anthropic({
+          apiKey: this.configService.get('ANTHROPIC_API_KEY'),
+        });
+      },
     });
   }
 

@@ -306,9 +306,7 @@ Always use the pdf_generator tool to generate a PDF document from the markdown c
                 service: 'SupervisorService',
                 method: 'createSupervisor',
             }));
-            const graph = workflow.compile({
-                checkpointer,
-            });
+            const graph = workflow.compile();
             this.supervisor = graph;
             this.loggerService.log(JSON.stringify({
                 message: 'Supervisor created successfully',
@@ -348,10 +346,7 @@ Always use the pdf_generator tool to generate a PDF document from the markdown c
                     },
                 ],
             }, {
-                configurable: {
-                    thread_id: threadId,
-                },
-                recursionLimit: 30,
+                recursionLimit: 10,
             });
             this.loggerService.log(JSON.stringify({
                 message: 'Summary report generated successfully',
@@ -391,7 +386,7 @@ Always use the pdf_generator tool to generate a PDF document from the markdown c
                 dataCount: auditData.length,
                 sampleCount: Math.min(20, auditData.length),
             }));
-            const content = (0, index_1.supervisorSummaryAgentPrompt)(JSON.stringify(auditData), task || 'Create a detailed summary report of the audit data', new Date().toISOString().split('T')[0]);
+            const content = (0, index_1.supervisorSummaryAgentPrompt)(JSON.stringify(auditData.slice(0, 10)), task || 'Create a detailed summary report of the audit data', new Date().toISOString().split('T')[0]);
             this.loggerService.log(JSON.stringify({
                 message: 'Prepared content for summary generation',
                 service: 'SupervisorService',
