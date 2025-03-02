@@ -342,7 +342,7 @@ Format your response as detailed markdown that can be converted to a professiona
       );
 
       const content = supervisorSummaryAgentPrompt(
-        JSON.stringify(auditData.slice(0, 10)),
+        JSON.stringify(auditData),
         task || 'Create a detailed summary report of the audit data',
         new Date().toISOString().split('T')[0],
       );
