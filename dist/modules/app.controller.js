@@ -44,7 +44,7 @@ let AppController = class AppController {
         return await this.databaseService.getSBUWiseAuditData(Object.keys(yearFilter).length ? yearFilter : undefined);
     }
     async getYearWiseAudits() {
-        return await this.databaseService.getYearWiseAuditData();
+        return await this.databaseService.getYearWiseSBUData();
     }
 };
 exports.AppController = AppController;

@@ -86,84 +86,150 @@ CURRENT DATE: ${currentDate}
 `;
 };
 
-export const sbuWiseComparisonPrompt = (jsonData: string) => `
-You are tasked with creating a detailed comparison summary of the SBU (Strategic Business Unit) data for audits. The data is provided in JSON format. Your goal is to analyze this data and provide insights on the audit performance across different SBUs and years.
 
-Here is the JSON data you will be working with:
 
-<json_data>
-${jsonData}
-</json_data>
+export const sbuWiseComparisonPrompt = (jsonData: string)=>{
+   const currentDate = new Date();
+   const lastYear = currentDate.getFullYear() - 1;
+   return `
+You are an expert data analyst specializing in audit performance analysis. Your task is to analyze audit data for different Strategic Business Units (SBUs) across multiple years and create a detailed comparison summary report in markdown format.
 
-Follow these steps to complete the task:
-
-1. Parse the JSON data and organize it by year and SBU.
-
-2. For each year (2012 and 2013):
-   a. List all SBUs present in the data.
-   b. Calculate the total number of audits across all SBUs.
-   c. Identify the SBU with the highest number of total audits.
-   d. Calculate the percentage of audits in "trouble" status for each SBU.
-
-3. Compare the data between 2012 and 2013:
-   a. Identify new SBUs that appeared in 2013.
-   b. Calculate the overall increase in total audits from 2012 to 2013.
-   c. Note any significant changes in audit numbers for SBUs present in both years.
-
-4. Analyze the distribution of audit statuses:
-   a. Calculate the percentage of audits in each status (trouble, needsAttention, onPlan, completed) for each year.
-   b. Identify any SBUs with audit statuses other than "trouble" in 2013.
-
-5. Provide insights on the audit performance:
-   a. Comment on the overall trend in audit numbers and statuses.
-   b. Highlight any concerning patterns or improvements observed.
-
-6. Summarize your findings in a detailed, well-structured report. Include specific numbers and percentages to support your observations.
-
-Use appropriate subheadings to organize your report clearly. Ensure that your summary is comprehensive, covering all the points mentioned above, and provides valuable insights into the audit performance across different SBUs and years.
-GIVE THE OUTPUT IN MARKDOWN FORMAT. without any other text and fabrication.
-`;
-
-export const auditWiseComparisonPrompt = (jsonData: string) => `
-You will be given audit data for different locations across multiple years. Your task is to create a detailed comparison summary report of the location-wise Audit Data in well-formatted markdown. Follow these instructions carefully:
-
-1. First, you will receive the audit data in the following format:
+First, carefully review the provided audit data:
 
 <audit_data>
 ${jsonData}
 </audit_data>
 
-2. Parse and organize the data:
-   - Identify the years present in the data
-   - For each year, list all locations and their corresponding audit statistics
-   - Pay attention to the following fields for each location: totalAudits, trouble, needsAttention, onPlan, and completed
+For reference:
+<current_year>${currentDate.getFullYear()}</current_year>
+<current_month>${currentDate.getMonth()}</current_month>
+<previous_year>${lastYear}</previous_year>
 
-3. Create a comparison summary report with the following structure:
-   a. Overview
-      - Total number of years in the data
-      - Total number of unique locations across all years
-   
-   b. Year-by-Year Comparison
-      - For each year:
-        - Total number of locations
-        - Total number of audits
-        - Breakdown of audit statuses (trouble, needsAttention, onPlan, completed)
-   
-   c. Location Analysis
-      - List locations present in multiple years
-      - Highlight any significant changes in audit numbers or statuses for these locations
-   
-   d. Notable Observations
-      - Any locations with unusually high or low audit numbers
-      - Trends in audit statuses across years or locations
+Before generating the final report, perform a thorough analysis of the data. Perform your analysis inside <data_analysis> tags. Within these tags:
 
-4. Format the report in markdown:
-   - Use appropriate headers (##, ###) for different sections
-   - Use bullet points or numbered lists where applicable
-   - Create tables for presenting numerical data
-   - Use bold or italic text for emphasis where needed
+1. Create a table of the raw data for easy reference.
+2. List all unique SBUs and years present in the data, counting each one explicitly.
+3. Parse and organize the data, identifying years and SBUs.
+4. Calculate year-by-year statistics and analyze SBU trends.
+5. Compare the current year's data to the previous year's data, including explicit calculations for year-over-year changes for each metric.
+6. For each SBU, write down specific observations about audit numbers and statuses across years.
+7. List out notable observations to ensure nothing is missed.
+8. Identify and describe the top 3 most significant trends or changes in the data.
 
-5. Important: Focus only on the information provided in the audit data. Do not add any additional context, explanations, or data that is not present in the given input.
+Based on your analysis, create a summary report in markdown format. The report should include the following sections:
 
-GIVE THE OUTPUT IN MARKDOWN FORMAT. without any other text and fabrication.
-`;
+1. Overview
+   - Total number of years in the data
+   - Total number of unique SBUs across all years
+
+2. Current Year vs Previous Year Comparison
+   - Compare key metrics between the current year and the previous year
+   - Highlight significant changes or trends
+
+3. Year-by-Year Comparison
+   - For each year:
+     - Total number of SBUs
+     - Total number of audits
+     - Breakdown of audit statuses (trouble, needsAttention, onPlan, completed)
+
+4. SBU Analysis
+   - Provide a summary of SBUs present in multiple years (no table needed)
+   - Highlight significant changes in audit numbers or statuses for these SBUs
+
+5. Notable Observations
+   - SBUs with unusually high or low audit numbers
+   - Trends in audit statuses across years or SBUs
+
+6. Key Trends
+   - Summarize the most important trends observed in the data
+   - Include both positive and negative trends if applicable
+
+7. Summary
+   Conclude with a concise summary of 6-7 paragraphs, not exceeding 10000 characters. Focus on the most important insights and trends, using specific numbers and percentages to support your observations.
+
+Formatting Requirements:
+- Use appropriate markdown headers (##, ###) for different sections
+- Use bullet points or numbered lists where applicable
+- Create tables for presenting numerical data
+- Use bold or italic text for emphasis where needed
+
+Important Notes:
+- Focus only on the information provided in the audit data. Do not add any additional context, explanations, or data that is not present in the given input.
+- Ensure your final output is in markdown format without any XML tags or extraneous text.
+
+
+Begin your analysis now, and then provide the final report in markdown format.
+`}
+
+
+export const auditWiseComparisonPrompt = (jsonData: string)=>{
+   const currentDate = new Date();
+   const lastYear = currentDate.getFullYear() - 1;
+   return `
+You are an expert data analyst specializing in audit performance analysis. Your task is to analyze audit data for different locations across multiple years and create a detailed comparison summary report in markdown format.
+
+First, carefully review the provided audit data:
+
+<audit_data>
+${jsonData}
+</audit_data>
+
+For reference:
+<current_year>${currentDate.getFullYear()}</current_year>
+<current_month>${currentDate.getMonth()}</current_month>
+<previous_year>${lastYear}</previous_year>
+
+
+Before generating the final report, perform a thorough analysis of the data. Wrap your analysis inside <data_analysis> tags, but do not include these tags in the final output. Within these tags:
+1. Create a table of the raw data for easy reference.
+2. List all unique locations and years present in the data.
+3. Parse and organize the data, identifying years and locations.
+4. Calculate year-by-year statistics and analyze location trends.
+5. Compare the current year's data to the previous year's data, including explicit calculations for year-over-year changes.
+6. For each location, write down specific observations about audit numbers and statuses across years.
+7. List out notable observations to ensure nothing is missed.
+
+Based on your analysis, create a summary report in markdown format. The report should include:
+
+1. Overview
+   - Total number of years in the data
+   - Total number of unique locations across all years
+
+2. Current Year vs Previous Year Comparison
+   - Compare key metrics between the current year and the previous year
+   - Highlight significant changes or trends
+
+3. Year-by-Year Comparison
+   - For each year:
+     - Total number of locations
+     - Total number of audits
+     - Breakdown of audit statuses (trouble, needsAttention, onPlan, completed)
+
+4. Location Analysis
+   - Give me locations present in multiple years summary no table needed
+   - Highlight significant changes in audit numbers or statuses for these locations
+
+5. Notable Observations
+   - Locations with unusually high or low audit numbers
+   - Trends in audit statuses across years or locations
+
+6. Key Trends
+   - Summarize the most important trends observed in the data
+   - Include both positive and negative trends if applicable
+
+7. Summary
+   Conclude with a concise summary of 6-7 paragraphs, not exceeding 10000 characters. Focus on the most important insights and trends, using specific numbers and percentages to support your observations.
+
+Formatting Requirements:
+- Use appropriate markdown headers (##, ###) for different sections
+- Use bullet points or numbered lists where applicable
+- Create tables for presenting numerical data
+- Use bold or italic text for emphasis where needed
+
+Important Notes:
+- Focus only on the information provided in the audit data. Do not add any additional context, explanations, or data that is not present in the given input.
+- Ensure your final output is in markdown format without any XML tags or extraneous text.
+
+Begin your analysis now, and then provide the final report in markdown format.
+`
+}

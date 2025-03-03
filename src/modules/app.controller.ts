@@ -52,6 +52,6 @@ export class AppController {
 
   @Get('year-wise-audits')
   async getYearWiseAudits() {
-    return await this.databaseService.getYearWiseAuditData();
+    return await this.databaseService.getYearWiseSBUData();
   }
 }

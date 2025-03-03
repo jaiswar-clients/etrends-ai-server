@@ -87,7 +87,7 @@ let SummaryService = class SummaryService {
             const prompt = (0, index_1.sbuWiseComparisonPrompt)(jsonData);
             const response = await this.anthropic.messages.create({
                 model: this.model,
-                max_tokens: 4000,
+                max_tokens: 12000,
                 temperature: 0,
                 system: 'You are a helpful AI assistant that specializes in data analysis and audit report generation.',
                 messages: [{ role: 'user', content: prompt }],
@@ -105,6 +105,7 @@ let SummaryService = class SummaryService {
                 method: 'generateSBUWiseSummary',
                 summaryLength: summaryText.length,
             }));
+            summaryText = summaryText.replace(/<data_analysis>[\s\S]*?<\/data_analysis>/g, '');
             return summaryText;
         }
         catch (error) {
@@ -130,7 +131,7 @@ let SummaryService = class SummaryService {
             const prompt = (0, index_1.auditWiseComparisonPrompt)(jsonData);
             const response = await this.anthropic.messages.create({
                 model: this.model,
-                max_tokens: 4000,
+                max_tokens: 12000,
                 temperature: 0,
                 system: 'You are a helpful AI assistant that specializes in data analysis and audit report generation.',
                 messages: [{ role: 'user', content: prompt }],
@@ -147,6 +148,13 @@ let SummaryService = class SummaryService {
                 service: 'SummaryService',
                 method: 'generateLocationWiseSummary',
                 summaryLength: summaryText.length,
+            }));
+            summaryText = summaryText.replace(/<data_analysis>[\s\S]*?<\/data_analysis>/g, '');
+            this.loggerService.log(JSON.stringify({
+                message: 'Cleaned summary text of analysis sections',
+                service: 'SummaryService',
+                method: 'generateLocationWiseSummary',
+                cleanedSummaryLength: summaryText.length,
             }));
             return summaryText;
         }

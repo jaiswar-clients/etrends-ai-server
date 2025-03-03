@@ -358,7 +358,7 @@ like <report_breakdown> or anything like that.
                 dataCount: auditData.length,
                 sampleCount: Math.min(20, auditData.length),
             }));
-            const content = (0, index_1.supervisorSummaryAgentPrompt)(JSON.stringify(auditData.slice(0, 20)), task || 'Create a detailed summary report of the audit data', new Date().toISOString().split('T')[0]);
+            const content = (0, index_1.supervisorSummaryAgentPrompt)(JSON.stringify(auditData), task || 'Create a detailed summary report of the audit data', new Date().toISOString().split('T')[0]);
             this.loggerService.log(JSON.stringify({
                 message: 'Prepared content for summary generation',
                 service: 'SupervisorV2Service',
