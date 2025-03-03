@@ -115,7 +115,11 @@ export class SupervisorV2Service implements OnModuleInit {
     );
   }
 
-  async generateSummaryReport(content: string, threadId: string = 'default') {
+  async generateSummaryReport(
+    content: string,
+    threadId: string = 'default',
+    question: string,
+  ) {
     try {
       this.loggerService.log(
         JSON.stringify({
@@ -149,6 +153,10 @@ NOT USE THIS
 
 USE THIS
 ### Locations Identified in the Report: 1. Mumbai (MUM) - 13 audits 2. Pune - 7 audits
+
+NOTE: STRICKLY DON'T use any xml tags in your response.
+like <report_breakdown> or anything like that.
+
 
 `;
 
@@ -205,7 +213,7 @@ USE THIS
       }
 
       // Generate PDF from the markdown content
-      const pdfResult = await this.generatePDF(markdownContent);
+      const pdfResult = await this.generatePDF(markdownContent, question);
 
       this.loggerService.log(
         JSON.stringify({
@@ -238,20 +246,20 @@ USE THIS
     }
   }
 
-  async generatePDF(content: string): Promise<string> {
+  async generatePDF(content: string, fileName: string): Promise<string> {
     try {
       const timestamp = new Date().getTime();
-      const filename = `audit_summary_report_${timestamp}.pdf`;
+      const filename = `${fileName.replaceAll(' ', '_').toLowerCase()}_${timestamp}.pdf`;
       const outputPath = path.join(this.pdfOutputPath, filename);
 
       // Convert markdown to HTML - without the removed options
       marked.setOptions({
         gfm: true,
       });
-      
+
       // Convert markdown to HTML and ensure it's a string
       const html = await Promise.resolve(marked.parse(content));
-      
+
       this.loggerService.log(
         JSON.stringify({
           message: 'Markdown converted to HTML',
@@ -273,7 +281,7 @@ USE THIS
       const logoPath = path.join(process.cwd(), 'public', 'images', 'logo.jpg');
       const logoBuffer = await fs.readFile(logoPath);
       const logoBase64 = `data:image/jpeg;base64,${logoBuffer.toString('base64')}`;
-      
+
       this.loggerService.log(
         JSON.stringify({
           message: 'Logo image encoded to base64',
@@ -358,12 +366,11 @@ USE THIS
         </html>
       `);
 
-
       await page.pdf({
         path: outputPath,
         format: 'A4',
         margin: {
-          top: '80px', /* Increased top margin to accommodate the logo */
+          top: '80px' /* Increased top margin to accommodate the logo */,
           right: '20px',
           bottom: '20px',
           left: '20px',
@@ -380,7 +387,7 @@ USE THIS
           </div>
         `,
       });
-      
+
       await browser.close();
 
       this.loggerService.log(
@@ -451,7 +458,11 @@ USE THIS
         }),
       );
 
-      const result = await this.generateSummaryReport(content, threadId);
+      const result = await this.generateSummaryReport(
+        content,
+        threadId,
+        task || 'Create a detailed summary report of the audit data',
+      );
 
       this.loggerService.log(
         JSON.stringify({

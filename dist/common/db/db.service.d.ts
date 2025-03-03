@@ -65,6 +65,32 @@ export interface IAuditData {
     OnPlan: number;
     Completed: number;
 }
+export interface LocationWiseAuditData {
+    location: string;
+    totalAudits: number;
+    trouble: number;
+    needsAttention: number;
+    onPlan: number;
+    completed: number;
+}
+export interface YearFilterParams {
+    startYear?: number;
+    endYear?: number;
+}
+export interface SBUWiseAuditData {
+    sbu: string;
+    totalAudits: number;
+    trouble: number;
+    needsAttention: number;
+    onPlan: number;
+    completed: number;
+}
+export interface YearWiseAuditData {
+    [year: string]: LocationWiseAuditData[];
+}
+export interface YearWiseSBUData {
+    [year: string]: SBUWiseAuditData[];
+}
 export declare class DatabaseService implements OnModuleInit {
     private readonly db;
     private readonly loggerService;
@@ -81,4 +107,8 @@ export declare class DatabaseService implements OnModuleInit {
     observationDataForVectorStore(): Promise<string>;
     private createDistribution;
     private formatDistribution;
+    getLocationWiseAuditData(yearFilter?: YearFilterParams): Promise<LocationWiseAuditData[]>;
+    getSBUWiseAuditData(yearFilter?: YearFilterParams): Promise<SBUWiseAuditData[]>;
+    getYearWiseAuditData(): Promise<YearWiseAuditData>;
+    getYearWiseSBUData(): Promise<YearWiseSBUData>;
 }

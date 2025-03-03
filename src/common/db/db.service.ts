@@ -71,6 +71,37 @@ export interface IAuditData {
   Completed: number;
 }
 
+export interface LocationWiseAuditData {
+  location: string;
+  totalAudits: number;
+  trouble: number;
+  needsAttention: number;
+  onPlan: number;
+  completed: number;
+}
+
+export interface YearFilterParams {
+  startYear?: number;
+  endYear?: number;
+}
+
+export interface SBUWiseAuditData {
+  sbu: string;
+  totalAudits: number;
+  trouble: number;
+  needsAttention: number;
+  onPlan: number;
+  completed: number;
+}
+
+export interface YearWiseAuditData {
+  [year: string]: LocationWiseAuditData[];
+}
+
+export interface YearWiseSBUData {
+  [year: string]: SBUWiseAuditData[];
+}
+
 @Injectable()
 export class DatabaseService implements OnModuleInit {
   private readonly logger = new Logger(DatabaseService.name);
@@ -376,10 +407,10 @@ DON't Repeat any data from the user input you have to create new insights from t
       // Build textual representation
       let textualData = `Audit Observations Overview: \n`;
       textualData += `Total observations: ${totalObservations} (${statusRatio}% closed). \n`;
-      textualData += `Open observations: ${totalOpenStatus}. \n`;
-      textualData += `Repeat observations: ${totalRepeatObservations}. \n`;
-      textualData += `Breached observations: ${breachedObservations}. \n`;
-      textualData += `Not due observations: ${notDueObservations}. \n`;
+      textualData += `Total Open observations: ${totalOpenStatus}. \n`;
+      textualData += `Total Repeat observations: ${totalRepeatObservations}. \n`;
+      textualData += `Total Breached observations: ${breachedObservations}. \n`;
+      textualData += `Total Not due observations: ${notDueObservations}. \n`;
       textualData += `Average age: ${avgAge.toFixed(1)} days. \n`;
       textualData += `Current year observations: ${currentYearObservations}. \n`;
       textualData += `Financial impacts recorded: ${financialImpactCount}. \n`;
@@ -513,5 +544,276 @@ DON't Repeat any data from the user input you have to create new insights from t
     });
 
     return text.replace(/, $/, '. ');
+  }
+
+  async getLocationWiseAuditData(yearFilter?: YearFilterParams): Promise<LocationWiseAuditData[]> {
+    try {
+      // Get all audit data
+      const auditData = await this.getAIAuditProgressData();
+      
+      // Filter by year if filter params provided
+      let filteredData = auditData;
+      if (yearFilter) {
+        filteredData = auditData.filter(audit => {
+          const auditYear = new Date(audit.auditFrom).getFullYear();
+          const startYear = yearFilter.startYear || 0;
+          const endYear = yearFilter.endYear || 9999;
+          
+          return auditYear >= startYear && auditYear <= endYear;
+        });
+      }
+
+      // Group by location
+      const locationMap = new Map<string, LocationWiseAuditData>();
+
+      filteredData.forEach(audit => {
+        const location = audit.Location || 'Unknown';
+        
+        if (!locationMap.has(location)) {
+          locationMap.set(location, {
+            location,
+            totalAudits: 0,
+            trouble: 0,
+            needsAttention: 0,
+            onPlan: 0,
+            completed: 0
+          });
+        }
+
+        const locationData = locationMap.get(location)!;
+        locationData.totalAudits++;
+        locationData.trouble += audit.Trouble;
+        locationData.needsAttention += audit.NeedsAttention;
+        locationData.onPlan += audit.OnPlan;
+        locationData.completed += audit.Completed;
+      });
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Successfully retrieved location-wise audit data',
+          data: {
+            totalLocations: locationMap.size,
+            yearFilter,
+            totalRecords: filteredData.length
+          },
+        }),
+      );
+
+      return Array.from(locationMap.values());
+    } catch (error) {
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error getting location-wise audit data',
+          error,
+          yearFilter,
+        }),
+      );
+      throw new Error('Failed to get location-wise audit data');
+    }
+  }
+
+  async getSBUWiseAuditData(yearFilter?: YearFilterParams): Promise<SBUWiseAuditData[]> {
+    try {
+      // Get all audit data
+      const auditData = await this.getAIAuditProgressData();
+      
+      // Filter by year if filter params provided
+      let filteredData = auditData;
+      if (yearFilter) {
+        filteredData = auditData.filter(audit => {
+          const auditYear = new Date(audit.auditFrom).getFullYear();
+          const startYear = yearFilter.startYear || 0;
+          const endYear = yearFilter.endYear || 9999;
+          
+          return auditYear >= startYear && auditYear <= endYear;
+        });
+      }
+
+      // Group by SBU
+      const sbuMap = new Map<string, SBUWiseAuditData>();
+
+      filteredData.forEach(audit => {
+        const sbu = audit.SBU || 'Unknown';
+        
+        if (!sbuMap.has(sbu)) {
+          sbuMap.set(sbu, {
+            sbu,
+            totalAudits: 0,
+            trouble: 0,
+            needsAttention: 0,
+            onPlan: 0,
+            completed: 0
+          });
+        }
+
+        const sbuData = sbuMap.get(sbu)!;
+        sbuData.totalAudits++;
+        sbuData.trouble += audit.Trouble;
+        sbuData.needsAttention += audit.NeedsAttention;
+        sbuData.onPlan += audit.OnPlan;
+        sbuData.completed += audit.Completed;
+      });
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Successfully retrieved SBU-wise audit data',
+          data: {
+            totalSBUs: sbuMap.size,
+            yearFilter,
+            totalRecords: filteredData.length
+          },
+        }),
+      );
+
+      return Array.from(sbuMap.values());
+    } catch (error) {
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error getting SBU-wise audit data',
+          data: { error, yearFilter },
+        }),
+      );
+      throw new Error('Failed to get SBU-wise audit data');
+    }
+  }
+
+  async getYearWiseAuditData(): Promise<YearWiseAuditData> {
+    try {
+      // Get all audit data
+      const auditData = await this.getAIAuditProgressData();
+      
+      // Group by year and then by location
+      const yearMap: YearWiseAuditData = {};
+
+      auditData.forEach(audit => {
+        const year = new Date(audit.auditFrom).getFullYear().toString();
+        const location = audit.Location || 'Unknown';
+        
+        // Initialize year entry if it doesn't exist
+        if (!yearMap[year]) {
+          yearMap[year] = [];
+        }
+        
+        // Find location entry for this year or create it
+        let locationData = yearMap[year].find(item => item.location === location);
+        
+        if (!locationData) {
+          locationData = {
+            location,
+            totalAudits: 0,
+            trouble: 0,
+            needsAttention: 0,
+            onPlan: 0,
+            completed: 0
+          };
+          yearMap[year].push(locationData);
+        }
+        
+        // Update location data with this audit's information
+        locationData.totalAudits++;
+        locationData.trouble += audit.Trouble;
+        locationData.needsAttention += audit.NeedsAttention;
+        locationData.onPlan += audit.OnPlan;
+        locationData.completed += audit.Completed;
+      });
+
+      // Sort years in descending order (most recent first)
+      const sortedYearMap: YearWiseAuditData = {};
+      Object.keys(yearMap)
+        .sort((a, b) => parseInt(b) - parseInt(a))
+        .forEach(year => {
+          sortedYearMap[year] = yearMap[year];
+        });
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Successfully retrieved year-wise audit data',
+          data: {
+            totalYears: Object.keys(sortedYearMap).length,
+            years: Object.keys(sortedYearMap),
+          },
+        }),
+      );
+
+      return sortedYearMap;
+    } catch (error) {
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error getting year-wise audit data',
+          data: { error },
+        }),
+      );
+      throw new Error('Failed to get year-wise audit data');
+    }
+  }
+
+  async getYearWiseSBUData(): Promise<YearWiseSBUData> {
+    try {
+      // Get all audit data
+      const auditData = await this.getAIAuditProgressData();
+      
+      // Group by year and then by SBU
+      const yearMap: YearWiseSBUData = {};
+
+      auditData.forEach(audit => {
+        const year = new Date(audit.auditFrom).getFullYear().toString();
+        const sbu = audit.SBU || 'Unknown';
+        
+        // Initialize year entry if it doesn't exist
+        if (!yearMap[year]) {
+          yearMap[year] = [];
+        }
+        
+        // Find SBU entry for this year or create it
+        let sbuData = yearMap[year].find(item => item.sbu === sbu);
+        
+        if (!sbuData) {
+          sbuData = {
+            sbu,
+            totalAudits: 0,
+            trouble: 0,
+            needsAttention: 0,
+            onPlan: 0,
+            completed: 0
+          };
+          yearMap[year].push(sbuData);
+        }
+        
+        // Update SBU data with this audit's information
+        sbuData.totalAudits++;
+        sbuData.trouble += audit.Trouble;
+        sbuData.needsAttention += audit.NeedsAttention;
+        sbuData.onPlan += audit.OnPlan;
+        sbuData.completed += audit.Completed;
+      });
+
+      // Sort years in descending order (most recent first)
+      const sortedYearMap: YearWiseSBUData = {};
+      Object.keys(yearMap)
+        .sort((a, b) => parseInt(b) - parseInt(a))
+        .forEach(year => {
+          sortedYearMap[year] = yearMap[year];
+        });
+
+      this.loggerService.log(
+        JSON.stringify({
+          message: 'Successfully retrieved year-wise SBU audit data',
+          data: {
+            totalYears: Object.keys(sortedYearMap).length,
+            years: Object.keys(sortedYearMap),
+          },
+        }),
+      );
+
+      return sortedYearMap;
+    } catch (error) {
+      this.loggerService.error(
+        JSON.stringify({
+          message: 'Error getting year-wise SBU audit data',
+          data: { error },
+        }),
+      );
+      throw new Error('Failed to get year-wise SBU audit data');
+    }
   }
 }

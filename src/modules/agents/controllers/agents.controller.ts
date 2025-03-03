@@ -3,6 +3,7 @@ import { RagService } from '../services/rag.service';
 import { SupervisorService } from '../services/supervisor.service';
 import { SelfRagService } from '../services/self-rag.service';
 import { SupervisorV2Service } from '../services/supervisor-v2.service';
+import { SummaryService } from '../services/summary.service';
 
 @Controller('agents')
 export class AgentsController {
@@ -11,6 +12,7 @@ export class AgentsController {
     private readonly supervisorService: SupervisorService,
     private readonly selfRagService: SelfRagService,
     private readonly supervisorV2Service: SupervisorV2Service,
+    private readonly summaryService: SummaryService,
   ) {}
 
   @Get('reports')
@@ -33,5 +35,15 @@ export class AgentsController {
       body.question,
       body.threadId || 'default',
     );
+  }
+
+  @Post('summary/sbu')
+  async getSBUWiseSummary() {
+    return this.summaryService.generateSBUWiseSummary();
+  }
+
+  @Post('summary/location')
+  async getAuditWiseSummary() {
+    return this.summaryService.generateLocationWiseSummary();
   }
 }

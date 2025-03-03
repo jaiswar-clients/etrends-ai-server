@@ -296,8 +296,8 @@ let RagService = class RagService {
         if user ask about observation data, use the retrieve_observation_data tool.
         NOTE: You should answer the question based on the context but if context has any other information other then question then modify the information in context to answer the question.
         NOTE: Answer should be in markdown format.
-        NOTE: Pay attention to the most recent question from the user and answer it specifically, while maintaining context from previous questions if relevant.`);
-            console.log([systemMessage, ...filteredMessages]);
+        NOTE: Pay attention to the most recent question from the user and answer it specifically, while maintaining context from previous questions if relevant.
+        `);
             const response = await model.invoke([systemMessage, ...filteredMessages]);
             this.loggerService.log(JSON.stringify({
                 message: 'Agent response received',
@@ -401,7 +401,16 @@ Formulate an improved question:`);
             }));
             const uniqueThreadId = `${threadId}_${Date.now()}`;
             const response = await this.app.invoke({
-                messages: [new messages_2.HumanMessage(question)],
+                messages: [new messages_2.HumanMessage(`
+            question: ${question}
+            NOTE: STRICKLY DON'T Mention something like the based on the context or source of the information, just give answer plain and simple
+        EXAMPLE:
+        IT SHOULD NOT BE LIKE THIS:
+        Based on the context, the risk-wise breached observations are: High (152), Medium (131), and Low (34). This indicates that high-risk breaches constitute the largest category, followed closely by medium-risk breaches, with low-risk breaches representing the smallest portion.
+
+        IT SHOULD BE LIKE THIS:
+        The risk-wise breached observations are: High (152), Medium (131), and Low (34). This indicates that high-risk breaches constitute the largest category, followed closely by medium-risk breaches, with low-risk breaches representing the smallest portion.
+            `)],
             }, {
                 configurable: {
                     thread_id: uniqueThreadId,

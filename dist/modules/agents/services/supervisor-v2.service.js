@@ -93,7 +93,7 @@ let SupervisorV2Service = class SupervisorV2Service {
             model: this.model,
         }));
     }
-    async generateSummaryReport(content, threadId = 'default') {
+    async generateSummaryReport(content, threadId = 'default', question) {
         try {
             this.loggerService.log(JSON.stringify({
                 message: 'Starting summary report generation',
@@ -123,6 +123,10 @@ NOT USE THIS
 
 USE THIS
 ### Locations Identified in the Report: 1. Mumbai (MUM) - 13 audits 2. Pune - 7 audits
+
+NOTE: STRICKLY DON'T use any xml tags in your response.
+like <report_breakdown> or anything like that.
+
 
 `;
             const analysisResponse = await this.anthropic.messages.create({
@@ -166,7 +170,7 @@ USE THIS
                 }));
                 throw new Error('No content received from AI model');
             }
-            const pdfResult = await this.generatePDF(markdownContent);
+            const pdfResult = await this.generatePDF(markdownContent, question);
             this.loggerService.log(JSON.stringify({
                 message: 'Summary report generated successfully',
                 service: 'SupervisorV2Service',
@@ -190,10 +194,10 @@ USE THIS
             throw new common_1.HttpException(`Failed to generate summary report: ${error instanceof Error ? error.message : String(error)}`, common_1.HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
-    async generatePDF(content) {
+    async generatePDF(content, fileName) {
         try {
             const timestamp = new Date().getTime();
-            const filename = `audit_summary_report_${timestamp}.pdf`;
+            const filename = `${fileName.replaceAll(' ', '_').toLowerCase()}_${timestamp}.pdf`;
             const outputPath = path.join(this.pdfOutputPath, filename);
             marked_1.marked.setOptions({
                 gfm: true,
@@ -354,7 +358,7 @@ USE THIS
                 dataCount: auditData.length,
                 sampleCount: Math.min(20, auditData.length),
             }));
-            const content = (0, index_1.supervisorSummaryAgentPrompt)(JSON.stringify(auditData), task || 'Create a detailed summary report of the audit data', new Date().toISOString().split('T')[0]);
+            const content = (0, index_1.supervisorSummaryAgentPrompt)(JSON.stringify(auditData.slice(0, 20)), task || 'Create a detailed summary report of the audit data', new Date().toISOString().split('T')[0]);
             this.loggerService.log(JSON.stringify({
                 message: 'Prepared content for summary generation',
                 service: 'SupervisorV2Service',
@@ -362,7 +366,7 @@ USE THIS
                 contentLength: content.length,
                 task: task || 'Create a detailed summary report of the audit data',
             }));
-            const result = await this.generateSummaryReport(content, threadId);
+            const result = await this.generateSummaryReport(content, threadId, task || 'Create a detailed summary report of the audit data');
             this.loggerService.log(JSON.stringify({
                 message: 'Summary report generated successfully',
                 service: 'SupervisorV2Service',

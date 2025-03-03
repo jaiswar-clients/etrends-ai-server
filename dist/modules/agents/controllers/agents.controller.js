@@ -18,12 +18,14 @@ const rag_service_1 = require("../services/rag.service");
 const supervisor_service_1 = require("../services/supervisor.service");
 const self_rag_service_1 = require("../services/self-rag.service");
 const supervisor_v2_service_1 = require("../services/supervisor-v2.service");
+const summary_service_1 = require("../services/summary.service");
 let AgentsController = class AgentsController {
-    constructor(ragService, supervisorService, selfRagService, supervisorV2Service) {
+    constructor(ragService, supervisorService, selfRagService, supervisorV2Service, summaryService) {
         this.ragService = ragService;
         this.supervisorService = supervisorService;
         this.selfRagService = selfRagService;
         this.supervisorV2Service = supervisorV2Service;
+        this.summaryService = summaryService;
     }
     async getAllReports() {
         return this.supervisorService.getAllReports();
@@ -33,6 +35,12 @@ let AgentsController = class AgentsController {
     }
     async runSupervisor(body) {
         return this.supervisorV2Service.run(body.question, body.threadId || 'default');
+    }
+    async getSBUWiseSummary() {
+        return this.summaryService.generateSBUWiseSummary();
+    }
+    async getAuditWiseSummary() {
+        return this.summaryService.generateLocationWiseSummary();
     }
 };
 exports.AgentsController = AgentsController;
@@ -56,11 +64,24 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AgentsController.prototype, "runSupervisor", null);
+__decorate([
+    (0, common_1.Post)('summary/sbu'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AgentsController.prototype, "getSBUWiseSummary", null);
+__decorate([
+    (0, common_1.Post)('summary/location'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AgentsController.prototype, "getAuditWiseSummary", null);
 exports.AgentsController = AgentsController = __decorate([
     (0, common_1.Controller)('agents'),
     __metadata("design:paramtypes", [rag_service_1.RagService,
         supervisor_service_1.SupervisorService,
         self_rag_service_1.SelfRagService,
-        supervisor_v2_service_1.SupervisorV2Service])
+        supervisor_v2_service_1.SupervisorV2Service,
+        summary_service_1.SummaryService])
 ], AgentsController);
 //# sourceMappingURL=agents.controller.js.map
