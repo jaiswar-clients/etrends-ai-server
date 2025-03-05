@@ -162,7 +162,8 @@ like <report_breakdown> or anything like that.
 
       const analysisResponse = await this.anthropic.messages.create({
         model: this.model,
-        max_tokens: 16000,
+        // max_tokens: 16000,
+        max_tokens: 8192,
         temperature: 0,
         system:
           'You are a helpful AI assistant that specializes in data analysis and report generation.',

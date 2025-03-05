@@ -106,7 +106,8 @@ export class SummaryService implements OnModuleInit {
       // Call Anthropic API
       const response = await this.anthropic.messages.create({
         model: this.model,
-        max_tokens: 12000,
+        // max_tokens: 12000,
+        max_tokens: 8192,
         temperature: 0,
         system: 'You are a helpful AI assistant that specializes in data analysis and audit report generation.',
         messages: [{ role: 'user', content: prompt }],
@@ -168,7 +169,8 @@ export class SummaryService implements OnModuleInit {
       // Call Anthropic API
       const response = await this.anthropic.messages.create({
         model: this.model,
-        max_tokens: 12000,
+        // max_tokens: 12000,
+        max_tokens: 8192,
         temperature: 0,
         system: 'You are a helpful AI assistant that specializes in data analysis and audit report generation.',
         messages: [{ role: 'user', content: prompt }],
